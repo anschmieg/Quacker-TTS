@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"image/color"
 	"io"
 	"net/http"
 	"os"
@@ -15,107 +14,117 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/joho/godotenv"
-	"github.com/zalando/go-keyring"
 )
 
 const (
-	keychainService = "OpenAI_TTS"
-	keychainUser    = "api_token"
+	defaultInstructions = `Du bist die Stimme eines deutschsprachigen Lern-Podcasts. Du erklärst Themen klar, ruhig und niedrigschwellig. Zielgruppe: Studierende des Fachs. Sprich natürlich, in einem zügigen, aber gelassenen Tempo. Vermeide jeden Eindruck von Roboter-Stimme oder Werbe-Sprech.
+				Sprechstil:
+				- Sprich zügig, aber ruhig – nicht gehetzt, nicht träge.
+				- Nutze natürliche Intonation: Betone Wichtiges etwas stärker, aber vermeide übertriebene Dynamik oder theatralische Betonung.
+				- Keine künstliche Fröhlichkeit. Klinge kompetent und freundlich, aber zurückhaltend.
+
+				Pausen:
+				- Setze kurze Pausen (ca. 0,5–1 Sekunde) nach Absätzen und wichtigen Aussagen, damit Hörer:innen mitdenken können.
+				- Füge längere Pausen zwischen Abschnitten oder Kapiteln ein.
+				- **Keine Pausen mitten im Satz**, auch wenn der Text dort einen Umbruch enthält.
+
+				Aussprache:
+				- Fremdwörter, Fachbegriffe und Abkürzungen klar und deutlich aussprechen.
+				- Bei Listen: Deutlich zählen („Erstens… Zweitens… Drittens…").
+				- Zwischenüberschriften leicht betonen („Kapitel 2: Datenanalyse").
+				- Beispiele dürfen einen leicht erzählenden Ton haben, um lebendiger zu wirken.
+
+				Hinweise zur Verarbeitung:
+				- Abschnitte in Lautschrift bitte vollständig überspringen – **nicht aussprechen**.
+				- Der Text ist Markdown-formatiert – **sprich die Markdown-Symbole nicht aus**, aber nutze sie, um die Rolle eines Text-Elements zu verstehen!`
+	defaultVoice = "echo"
+	defaultSpeed = 1.0 // Restore defaultSpeed constant
+	defaultInput = "Hello, world! This is a test of the text-to-speech system."
+	apiURL       = "http://localhost:11434/api/tts"
 )
 
 func main() {
-	// Load environment variables from .env files if present
-	loadEnvFiles()
-
-	// Check for OPENAI_API_KEY environment variable or fallback to keychain
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		apiKey, _ = keyring.Get(keychainService, keychainUser)
-	}
-
 	a := app.New()
-	w := a.NewWindow("OpenAI TTS Generator")
-
-	// Set default window size to a standard macOS screen size
-	w.Resize(fyne.NewSize(1440, 900))
-
-	// Prefilled values
-	defaultInstructions := `Du bist die Stimme eines deutschsprachigen Lern-Podcasts. Du erklärst Themen klar, ruhig und niedrigschwellig. Zielgruppe: Studierende des Fachs. Sprich natürlich, in einem zügigen, aber gelassenen Tempo. Vermeide jeden Eindruck von Roboter-Stimme oder Werbe-Sprech.
-
-Sprechstil:
-- Sprich zügig, aber ruhig – nicht gehetzt, nicht träge.
-- Nutze natürliche Intonation: Betone Wichtiges etwas stärker, aber vermeide übertriebene Dynamik oder theatralische Betonung.
-- Keine künstliche Fröhlichkeit. Klinge kompetent und freundlich, aber zurückhaltend.
-
-Pausen:
-- Setze kurze Pausen (ca. 0,5–1 Sekunde) nach Absätzen und wichtigen Aussagen, damit Hörer:innen mitdenken können.
-- Füge längere Pausen zwischen Abschnitten oder Kapiteln ein.
-- **Keine Pausen mitten im Satz**, auch wenn der Text dort einen Umbruch enthält.
-
-Aussprache:
-- Fremdwörter, Fachbegriffe und Abkürzungen klar und deutlich aussprechen.
-- Bei Listen: Deutlich zählen („Erstens… Zweitens… Drittens…").
-- Zwischenüberschriften leicht betonen („Kapitel 2: Datenanalyse").
-- Beispiele dürfen einen leicht erzählenden Ton haben, um lebendiger zu wirken.
-
-Hinweise zur Verarbeitung:
-- Abschnitte in Lautschrift bitte vollständig überspringen – **nicht aussprechen**.
-- Der Text ist Markdown-formatiert – **sprich die Markdown-Symbole nicht aus**, aber nutze sie, um die Rolle eines Text-Elements zu verstehen!`
-	defaultVoice := "shimmer"
-	defaultSpeed := 1.25
-	defaultInput := "Dieser Text wird in Sprache umgewandelt. Ersetze ihn mit deinem eigenen Text."
+	w := a.NewWindow("Easy TTS")
+	w.Resize(fyne.NewSize(900, 600))
 
 	// Widgets
 	instructions := widget.NewMultiLineEntry()
 	instructions.SetText(defaultInstructions)
-	voice := widget.NewEntry()
-	voice.SetText(defaultVoice)
-	speed := widget.NewSlider(0.5, 2.0)
-	speed.Value = defaultSpeed
-	speed.Step = 0.01
-	speedLabel := widget.NewLabel(fmt.Sprintf("Speed: %.2f", speed.Value))
-	speed.OnChanged = func(val float64) {
-		speedLabel.SetText(fmt.Sprintf("Speed: %.2f", val))
-	}
-	input := widget.NewMultiLineEntry()
-	input.SetText(defaultInput)
-
-	// Status text with support for scrollable response
-	responseText := widget.NewMultiLineEntry()
-	responseText.Wrapping = fyne.TextWrapWord
-	responseText.Disable()
-	responseScroll := container.NewVScroll(responseText)
-	responseScroll.SetMinSize(fyne.NewSize(600, 200))
-
-	// Create red text for errors
-	errorText := canvas.NewText("", color.RGBA{R: 255, G: 0, B: 0, A: 255})
-	errorText.Hide()
-
-	// Token management
-	tokenEntry := widget.NewPasswordEntry()
-	if apiKey != "" {
-		tokenEntry.SetText("********")
-	}
-
-	// Submit button declaration (must be defined before the form)
-	submitBtn := widget.NewButton("Submit", nil) // Function will be set after we create all UI elements
-
-	// Layout
-	formContainer := container.NewVBox(
-		widget.NewLabel("Instructions:"), instructions,
-		widget.NewLabel("Voice:"), voice,
-		speedLabel, speed,
-		widget.NewLabel("Input Text:"), input,
-		submitBtn,
-		responseScroll,
-		errorText,
+	instructions.SetMinRowsVisible(7)
+	instrCont := container.NewStack(
+		canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
+		instructions,
 	)
 
-	// Set the submit button callback now that we have formContainer
+	voice := widget.NewEntry()
+	voice.SetText(defaultVoice)
+	voiceCell := container.New(
+		layout.NewGridWrapLayout(fyne.NewSize(120, voice.MinSize().Height)),
+		voice,
+	)
+	voiceCont := voiceCell
+
+	speed := widget.NewSlider(0.5, 2.0)
+	speed.Value = defaultSpeed // Use defaultSpeed constant
+	speed.Step = 0.01
+	speedCell := container.New(
+		layout.NewGridWrapLayout(fyne.NewSize(120, speed.MinSize().Height)),
+		speed,
+	)
+	speedCont := speedCell
+
+	input := widget.NewMultiLineEntry()
+	input.SetText(defaultInput)
+	input.SetMinRowsVisible(7)
+
+	responseText := canvas.NewText("", theme.Color(theme.ColorNameForeground))
+	responseText.TextStyle = fyne.TextStyle{Bold: true}
+	responseText.TextSize = 20
+	responseText.Alignment = fyne.TextAlignCenter
+
+	errorText := canvas.NewText("", theme.Color(theme.ColorNameError))
+	errorText.Hide()
+
+	instrLabel := canvas.NewText("Instructions:", theme.Color(theme.ColorNameForeground))
+	instrLabel.TextStyle = fyne.TextStyle{Bold: true}
+	instrLabel.TextSize = 18
+	voiceLabel := canvas.NewText("Voice:", theme.Color(theme.ColorNameForeground))
+	voiceLabel.TextStyle = fyne.TextStyle{Bold: true}
+	voiceLabel.TextSize = 18
+	speedLabel := canvas.NewText(fmt.Sprintf("%.2f", speed.Value), theme.Color(theme.ColorNameForeground))
+	speedLabel.TextStyle = fyne.TextStyle{Bold: true}
+	speedLabel.TextSize = 18
+	speed.OnChanged = func(val float64) {
+		speedLabel.Text = fmt.Sprintf("%.2f", val)
+		speedLabel.Refresh()
+	}
+	inputLabel := canvas.NewText("Input Text:", theme.Color(theme.ColorNameForeground))
+	inputLabel.TextStyle = fyne.TextStyle{Bold: true}
+	inputLabel.TextSize = 18
+
+	submitBtn := widget.NewButton("Submit", nil)
+
+	voiceRow := container.NewHBox(voiceLabel, voiceCont)
+	speedRow := container.NewHBox(speedCont, speedLabel)
+	inputRow := container.NewVBox(container.NewHBox(inputLabel), input)
+	btnRow := container.NewHBox(layout.NewSpacer(), submitBtn, layout.NewSpacer())
+
+	formContainer := container.New(layout.NewVBoxLayout(),
+		container.New(layout.NewPaddedLayout(), instrLabel),
+		container.New(layout.NewPaddedLayout(), instrCont),
+		container.New(layout.NewPaddedLayout(), voiceRow),
+		container.New(layout.NewPaddedLayout(), speedRow),
+		container.New(layout.NewPaddedLayout(), inputRow),
+		container.New(layout.NewPaddedLayout(), btnRow),
+		container.New(layout.NewPaddedLayout(), responseText),
+		container.New(layout.NewPaddedLayout(), errorText),
+	)
+
 	submitBtn.OnTapped = func() {
-		// Clean input
 		clean := func(s string) string {
 			s = strings.ReplaceAll(s, `\`, `\\`)
 			s = strings.ReplaceAll(s, `"`, `\"`)
@@ -124,19 +133,17 @@ Hinweise zur Verarbeitung:
 			return s
 		}
 		payload := map[string]any{
-			"model":        "gpt-4o-mini-tts",
 			"instructions": clean(instructions.Text),
 			"voice":        voice.Text,
 			"speed":        speed.Value,
 			"input":        clean(input.Text),
 		}
 		body, _ := json.Marshal(payload)
-		req, _ := http.NewRequest("POST", "https://api.openai.com/v1/audio/speech", bytes.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 
 		errorText.Hide()
-		responseText.SetText("Submitting request...")
+		responseText.Text = "Submitting request..."
 		responseText.Refresh()
 
 		go func() {
@@ -153,25 +160,8 @@ Hinweise zur Verarbeitung:
 				return
 			}
 
-			// Read response body
 			b, _ := io.ReadAll(resp.Body)
-
-			// Generate filename from input text
-			words := strings.Fields(input.Text)
-			filename := "Text_output.mp3"
-			if len(words) >= 2 {
-				// Take first two words, limit to 28 chars each
-				w1, w2 := words[0], words[1]
-				if len(w1) > 28 {
-					w1 = w1[:28]
-				}
-				if len(w2) > 28 {
-					w2 = w2[:28]
-				}
-				filename = fmt.Sprintf("Text_%s_%s.mp3", w1, w2)
-			}
-
-			// Save the file
+			filename := "output.mp3"
 			outPath := filepath.Join(os.Getenv("HOME"), "Downloads", filename)
 			err = os.WriteFile(outPath, b, 0644)
 			if err != nil {
@@ -179,11 +169,9 @@ Hinweise zur Verarbeitung:
 				return
 			}
 
-			// Update UI in the main thread
-			w.Canvas().Refresh(responseText)
-			responseText.SetText(fmt.Sprintf("File saved successfully to: %s", outPath))
+			responseText.Text = fmt.Sprintf("File saved successfully to: %s", outPath)
+			responseText.Refresh()
 
-			// Show notification
 			fyne.CurrentApp().SendNotification(&fyne.Notification{
 				Title:   "Success",
 				Content: fmt.Sprintf("Audio saved to: %s", filepath.Base(filename)),
@@ -201,16 +189,4 @@ func showError(w fyne.Window, content *fyne.Container, errorText *canvas.Text, m
 	errorText.Text = msg
 	errorText.Refresh()
 	errorText.Show()
-}
-
-func loadEnvFiles() {
-	paths := []string{
-		".env",
-		filepath.Join(os.Getenv("HOME"), ".env"),
-	}
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			godotenv.Load(path)
-		}
-	}
 }

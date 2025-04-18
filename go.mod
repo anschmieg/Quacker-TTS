@@ -1,17 +1,12 @@
-module easy-tts-julia
+module easy-tts
 
 go 1.23.4
 
-require (
-	fyne.io/fyne/v2 v2.6.0
-	github.com/zalando/go-keyring v0.2.6
-)
+require fyne.io/fyne/v2 v2.6.0
 
 require (
-	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	fyne.io/systray v1.11.0 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
@@ -27,7 +22,6 @@ require (
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20241217141322-fcc2cadd6f08 // indirect
-	github.com/joho/godotenv v1.5.1
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
