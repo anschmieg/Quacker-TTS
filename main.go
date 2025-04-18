@@ -53,33 +53,21 @@ func main() {
 
 	// Widgets
 	instructions := widget.NewMultiLineEntry()
+	instructions.Wrapping = fyne.TextWrapWord
 	instructions.SetText(defaultInstructions)
-	instructions.SetMinRowsVisible(7)
-	instrCont := container.NewStack(
-		canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
-		instructions,
-	)
+	instrCont := container.NewScroll(instructions) // Scrollable container
 
 	voice := widget.NewEntry()
 	voice.SetText(defaultVoice)
-	voiceCell := container.New(
-		layout.NewGridWrapLayout(fyne.NewSize(120, voice.MinSize().Height)),
-		voice,
-	)
-	voiceCont := voiceCell
 
 	speed := widget.NewSlider(0.5, 2.0)
 	speed.Value = defaultSpeed // Use defaultSpeed constant
 	speed.Step = 0.01
-	speedCell := container.New(
-		layout.NewGridWrapLayout(fyne.NewSize(120, speed.MinSize().Height)),
-		speed,
-	)
-	speedCont := speedCell
 
 	input := widget.NewMultiLineEntry()
+	input.Wrapping = fyne.TextWrapWord
 	input.SetText(defaultInput)
-	input.SetMinRowsVisible(7)
+	inputCont := container.NewScroll(input) // Scrollable container
 
 	responseText := canvas.NewText("", theme.Color(theme.ColorNameForeground))
 	responseText.TextStyle = fyne.TextStyle{Bold: true}
@@ -95,12 +83,15 @@ func main() {
 	voiceLabel := canvas.NewText("Voice:", theme.Color(theme.ColorNameForeground))
 	voiceLabel.TextStyle = fyne.TextStyle{Bold: true}
 	voiceLabel.TextSize = 18
-	speedLabel := canvas.NewText(fmt.Sprintf("%.2f", speed.Value), theme.Color(theme.ColorNameForeground))
-	speedLabel.TextStyle = fyne.TextStyle{Bold: true}
-	speedLabel.TextSize = 18
+	speedTextLabel := canvas.NewText("Speed:", theme.Color(theme.ColorNameForeground))
+	speedTextLabel.TextStyle = fyne.TextStyle{Bold: true}
+	speedTextLabel.TextSize = 18
+	speedValueLabel := canvas.NewText(fmt.Sprintf("%.2f", speed.Value), theme.Color(theme.ColorNameForeground))
+	speedValueLabel.TextStyle = fyne.TextStyle{Bold: true}
+	speedValueLabel.TextSize = 18
 	speed.OnChanged = func(val float64) {
-		speedLabel.Text = fmt.Sprintf("%.2f", val)
-		speedLabel.Refresh()
+		speedValueLabel.Text = fmt.Sprintf("%.2f", val)
+		speedValueLabel.Refresh()
 	}
 	inputLabel := canvas.NewText("Input Text:", theme.Color(theme.ColorNameForeground))
 	inputLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -108,21 +99,36 @@ func main() {
 
 	submitBtn := widget.NewButton("Submit", nil)
 
-	voiceRow := container.NewHBox(voiceLabel, voiceCont)
-	speedRow := container.NewHBox(speedCont, speedLabel)
-	inputRow := container.NewVBox(container.NewHBox(inputLabel), input)
+	// Use a 6-column grid layout for more precise control
+	voiceSpeedRow := container.New(layout.NewGridLayout(6),
+		voiceLabel,         // Col 1 (~16.7%)
+		voice,              // Col 2 (~16.7%)
+		layout.NewSpacer(), // Col 3 (~16.7%) - Spacer for padding
+		speedTextLabel,     // Col 4 (~16.7%)
+		speed,              // Col 5 (~16.7%)
+		speedValueLabel,    // Col 6 (~16.7%)
+	)
+
 	btnRow := container.NewHBox(layout.NewSpacer(), submitBtn, layout.NewSpacer())
 
-	formContainer := container.New(layout.NewVBoxLayout(),
-		container.New(layout.NewPaddedLayout(), instrLabel),
-		container.New(layout.NewPaddedLayout(), instrCont),
-		container.New(layout.NewPaddedLayout(), voiceRow),
-		container.New(layout.NewPaddedLayout(), speedRow),
-		container.New(layout.NewPaddedLayout(), inputRow),
-		container.New(layout.NewPaddedLayout(), btnRow),
-		container.New(layout.NewPaddedLayout(), responseText),
-		container.New(layout.NewPaddedLayout(), errorText),
+	instrCont.SetMinSize(fyne.NewSize(0, 150)) // Give it a minimum height
+	inputCont.SetMinSize(fyne.NewSize(0, 150)) // Give it a minimum height
+
+	topSection := container.NewVBox(
+		instrLabel,
+		voiceSpeedRow,
+		inputLabel,
 	)
+	bottomSection := container.NewVBox(
+		btnRow,
+		responseText,
+		errorText,
+	)
+
+	textSplit := container.NewVSplit(instrCont, inputCont)
+	textSplit.Offset = 0.4 // Initial split ratio
+
+	content := container.NewBorder(topSection, bottomSection, nil, nil, textSplit)
 
 	submitBtn.OnTapped = func() {
 		clean := func(s string) string {
@@ -150,13 +156,13 @@ func main() {
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			if err != nil {
-				showError(w, formContainer, errorText, fmt.Sprintf("Request failed: %v", err))
+				showError(w, content, errorText, fmt.Sprintf("Request failed: %v", err))
 				return
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
 				b, _ := io.ReadAll(resp.Body)
-				showError(w, formContainer, errorText, fmt.Sprintf("Error %d: %s\n%s", resp.StatusCode, resp.Status, string(b)))
+				showError(w, content, errorText, fmt.Sprintf("Error %d: %s\n%s", resp.StatusCode, resp.Status, string(b)))
 				return
 			}
 
@@ -165,7 +171,7 @@ func main() {
 			outPath := filepath.Join(os.Getenv("HOME"), "Downloads", filename)
 			err = os.WriteFile(outPath, b, 0644)
 			if err != nil {
-				showError(w, formContainer, errorText, fmt.Sprintf("Failed to save file: %v", err))
+				showError(w, content, errorText, fmt.Sprintf("Failed to save file: %v", err))
 				return
 			}
 
@@ -179,7 +185,7 @@ func main() {
 		}()
 	}
 
-	w.SetContent(formContainer)
+	w.SetContent(content)
 	w.ShowAndRun()
 }
 
