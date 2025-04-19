@@ -7,7 +7,9 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
 	"easy-tts/internal/config"
@@ -27,6 +29,17 @@ func main() {
 	var apiKey string
 	var ttsClient *tts.Client
 
+	// Initial load of API key (env or keychain)
+	env := os.Getenv("OPENAI_API_KEY")
+	chainVal, _ := keyring.Get(keychainService, keychainUser)
+	if env != "" {
+		apiKey = env
+		ttsClient = tts.NewClient(apiKey)
+	} else if chainVal != "" {
+		apiKey = chainVal
+		ttsClient = tts.NewClient(apiKey)
+	}
+
 	// Placeholder for settings dialog callback
 	var showSettings func()
 
@@ -42,9 +55,9 @@ func main() {
 
 	// Define settings dialog function for selecting or entering API key
 	showSettings = func() {
+		// Prepare select and conditional widgets
 		env := os.Getenv("OPENAI_API_KEY")
 		chain, _ := keyring.Get(keychainService, keychainUser)
-		// Build choices including option for new key
 		choices := []string{}
 		if env != "" {
 			choices = append(choices, "Environment variable")
@@ -52,37 +65,65 @@ func main() {
 		if chain != "" {
 			choices = append(choices, "Keychain")
 		}
-		choices = append(choices, "New API Key")
-		// Create selection widget
-		var selected string
-		sel := widget.NewSelect(choices, func(c string) { selected = c })
+		choices = append(choices, "Enter new key")
+
+		sel := widget.NewSelect(choices, nil)
 		sel.PlaceHolder = "Select API Key Source"
+
 		entry := widget.NewPasswordEntry()
-		dialog.ShowForm("API Key Settings", "OK", "Cancel",
-			[]*widget.FormItem{{Text: "Source", Widget: sel}, {Text: "API Key (for New)", Widget: entry}},
-			func(ok bool) {
-				if !ok {
+
+		// Initial dialog content using FormLayout for spacing
+		content := container.New(layout.NewFormLayout(),
+			widget.NewLabel("Source"), sel,
+		)
+
+		// Create custom confirmation dialog
+		dlg := dialog.NewCustomConfirm("API Key Settings", "OK", "Cancel", content, func(ok bool) {
+			if !ok {
+				return
+			}
+			// Determine final API key
+			switch sel.Selected {
+			case "Environment variable":
+				apiKey = env
+			case "Keychain":
+				apiKey = chain
+			case "Enter new key":
+				if entry.Text == "" {
 					return
 				}
-				switch selected {
-				case "Environment variable":
-					apiKey = env
-				case "Keychain":
-					apiKey = chain
-				case "New API Key":
-					if entry.Text == "" {
-						return
-					}
-					apiKey = entry.Text
-					keyring.Set(keychainService, keychainUser, apiKey)
-				default:
-					return
-				}
-				ttsClient = tts.NewClient(apiKey)
-			}, ui.Window)
+				apiKey = entry.Text
+				keyring.Set(keychainService, keychainUser, apiKey)
+			default:
+				return
+			}
+			ttsClient = tts.NewClient(apiKey)
+		}, ui.Window)
+
+		// Update dialog when selection changes
+		sel.OnChanged = func(c string) {
+			// Rebuild content with conditional row
+			objs := []fyne.CanvasObject{
+				widget.NewLabel("Source"), sel,
+			}
+			if c == "Enter new key" {
+				objs = append(objs,
+					widget.NewLabel("API Key (for New)"), entry,
+				)
+			}
+			content.Objects = objs
+			content.Refresh()
+			dlg.Resize(content.MinSize().Add(fyne.NewSize(0, 40)))
+		}
+
+		// Show the dialog
+		dlg.Show()
 	}
-	// Show settings dialog at startup
-	showSettings()
+
+	// Show settings dialog at startup only if API key not found
+	if apiKey == "" {
+		showSettings()
+	}
 
 	// Run the app
 	ui.Window.ShowAndRun()

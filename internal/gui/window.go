@@ -68,12 +68,18 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 
 	// Create Widgets (using functions from widgets.go)
 	ui.Instructions = createInstructionsEntry()
-	ui.Voice = createVoiceEntry()
+	// Create and wrap the voice entry in a fixed-size container to make it wider
+	voiceEntry := createVoiceEntry()
+	voiceMin := voiceEntry.MinSize()
+	voiceContainer := container.New(layout.NewGridWrapLayout(fyne.NewSize(300, voiceMin.Height)), voiceEntry)
+	ui.Voice = voiceEntry
 	ui.Speed, ui.SpeedValueLabel = createSpeedSlider()
 	ui.Input = createInputEntry()
 	ui.SubmitBtn = createSubmitButton(onSubmit)
-	// Settings button in bottom left
-	settingsBtn := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), onSettings)
+	ui.SubmitBtn.Resize(fyne.NewSize(200, 40)) // Make submit button wider
+	// Settings button in bottom left (commented out)
+	// settingsBtn := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), onSettings)
+	settingsBtnTopRight := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), onSettings)
 	ui.SuccessText = createSuccessText()
 	ui.ErrorText = createErrorText()
 	ui.ProcessingText = createProcessingText()
@@ -86,23 +92,23 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 
 	instrLabel := createLabel("Instructions:", 18, true)
 	voiceLabel := createLabel("Voice:", 18, true)
-	speedTextLabel := createLabel("Speed:", 18, true)
+	// speedTextLabel := createLabel("Speed:", 18, true) // COMMENTED OUT
 	inputLabel := createLabel("Input Text:", 18, true)
 
-	voiceSpeedRow := container.New(layout.NewGridLayout(6),
+	// Replace grid layout with HBox for right-alignment
+	voiceSpeedRow := container.NewHBox(
 		voiceLabel,
-		ui.Voice,
+		voiceContainer,
 		layout.NewSpacer(),
-		speedTextLabel,
-		ui.Speed,
-		ui.SpeedValueLabel,
+		settingsBtnTopRight,
 	)
 
 	// Settings on left, submit button centered in window using 3-column layout
 	btnRow := container.NewGridWithColumns(3,
-		settingsBtn,
-		container.NewCenter(ui.SubmitBtn),
+		// settingsBtn, // COMMENTED OUT (bottom left)
 		layout.NewSpacer(), // visually balances the settings button
+		container.NewCenter(ui.SubmitBtn),
+		layout.NewSpacer(),
 	)
 
 	instrGroup := container.NewBorder(instrLabel, nil, nil, nil, instrCont)

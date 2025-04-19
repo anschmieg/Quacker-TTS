@@ -99,4 +99,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Attributions: `Icon.png` includes an image created by [Vectors Market](https://thenounproject.com/creator/vectorsmarket/) from [Noun Project](https://thenounproject.com/) published under the [CC BY-3.0](https://creativecommons.org/licenses/by/3.0/) license.*
+**Attribution:** *`Icon.png` includes an image created by [Vectors Market](https://thenounproject.com/creator/vectorsmarket/) from [Noun Project](https://thenounproject.com/) published under the [CC BY-3.0](https://creativecommons.org/licenses/by/3.0/) license.*

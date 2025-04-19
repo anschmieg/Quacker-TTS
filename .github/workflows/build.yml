@@ -1,7 +1,7 @@
 name: Build & Release Fyne App
 
 on:
-  workflow_dispatch: {} # Allow manual triggering
+  workflow_dispatch: # Allow manual triggering
   push:
     tags:
       - "v*.*.*" # Trigger on version tags like v1.0.0
@@ -10,7 +10,7 @@ jobs:
   build-macos-universal:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -18,30 +18,25 @@ jobs:
           go-version: "1.23"
       - name: Install Fyne CLI
         run: go install fyne.io/tools/cmd/fyne@latest
-      - name: Build Fyne App for macOS (Universal)
-        run: fyne package -os darwin -name 'Quacker' -app-id com.anschmieg.quacker -icon Icon.png
-      - name: Decode self-signed certificate
+      - name: Fetch self-signed certificate
         run: |
           echo "${{ secrets.MACOS_CERT_P12_BASE64 }}" | base64 --decode > quacker-selfsigned.p12
-      - name: Create temporary keychain
+      - name: Init temporary keychain
         run: |
           security create-keychain -p "temp_keychain_password" build.keychain
           security list-keychains -d user -s build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "temp_keychain_password" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain # Set timeout
+          security set-keychain-settings -lut 21600 build.keychain
       - name: Import certificate to keychain
         run: |
           security import quacker-selfsigned.p12 -k build.keychain -P "${{ secrets.MACOS_CERT_PASSWORD }}" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "temp_keychain_password" build.keychain # Allow codesign access
-      - name: Codesign the app with self-signed certificate
+          security set-key-partition-list -S apple-tool:,apple: -s -k "temp_keychain_password" build.keychain
+      - name: Build and codesign macOS App (Universal)
         run: |
+          fyne package -os darwin -name 'Quacker' -app-id com.anschmieg.quacker -icon Icon.png
           codesign --deep --force --sign "anschmieg Apps" Quacker.app
-      - name: Clean up keychain
-        if: always()
-        run: |
-          security delete-keychain build.keychain || echo "Keychain cleanup failed"
-      - name: Zip macOS App Bundle
+      - name: Bundle macOS App
         run: zip -r Quacker-macOS-universal.zip Quacker.app
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
@@ -49,7 +44,7 @@ jobs:
           name: Quacker-macOS-universal
           path: Quacker-macOS-universal.zip
 
-  build-linux-x86_64:
+  build-linux-and-windows:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -58,145 +53,47 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.23"
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Cache fyne-cross data
-        uses: actions/cache@v3
-        with:
-          path: ~/.fyne-cross
-          key: ${{ runner.os }}-fyne-cross-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-fyne-cross-
-
       - name: Install fyne-cross
         run: go install github.com/fyne-io/fyne-cross@latest
-      - name: Build Fyne App for Linux (x86_64) using fyne-cross
-        run: fyne-cross linux -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
-      - name: List directory contents
-        run: ls -l fyne-cross/dist/linux-amd64/
-      - name: Tar Linux Build (x86_64)
+      - name: Build Linux (x86_64) and Windows (x86_64)
+        run: |
+          fyne-cross linux -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
+          fyne-cross windows -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
+      - name: Archive Linux Build
         run: tar czvf Quacker-linux-x86_64.tar.gz -C fyne-cross/dist/linux-amd64 Quacker
-      - name: Upload Linux Artifact (x86_64)
+      - name: Zip Windows Build
+        run: zip -j Quacker-windows-x86_64.zip fyne-cross/dist/windows-amd64/Quacker.exe
+      - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Quacker-Linux-x86_64
           path: Quacker-linux-x86_64.tar.gz
-
-  build-linux-arm64:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Cache fyne-cross data
-        uses: actions/cache@v3
-        with:
-          path: ~/.fyne-cross
-          key: ${{ runner.os }}-fyne-cross-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-fyne-cross-
-
-      - name: Install fyne-cross
-        run: go install github.com/fyne-io/fyne-cross@latest
-      - name: Build Fyne App for Linux (arm64) using fyne-cross
-        run: fyne-cross linux -arch=arm64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
-      - name: Tar Linux Build (arm64)
-        run: tar czvf Quacker-linux-arm64.tar.gz -C fyne-cross/dist/linux-arm64 Quacker
-      - name: Upload Linux Artifact (arm64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: Quacker-Linux-arm64
-          path: Quacker-linux-arm64.tar.gz
-
-  build-windows-x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Cache fyne-cross data
-        uses: actions/cache@v3
-        with:
-          path: ~/.fyne-cross
-          key: ${{ runner.os }}-fyne-cross-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-fyne-cross-
-
-      - name: Install fyne-cross
-        run: go install github.com/fyne-io/fyne-cross@latest
-      - name: Build Fyne App for Windows (x86_64) using fyne-cross
-        run: fyne-cross windows -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
-      - name: Zip Windows Build (x86_64)
-        run: zip -j Quacker-windows-x86_64.zip fyne-cross/dist/windows-amd64/Quacker.exe
-      - name: Upload Windows Artifact (x86_64)
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Quacker-Windows-x86_64
           path: Quacker-windows-x86_64.zip
 
   release:
-    needs:
-      [
-        build-macos-universal,
-        build-linux-x86_64,
-        build-linux-arm64,
-        build-windows-x86_64,
-      ]
+    needs: [build-macos-universal, build-linux-and-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download macOS Artifact (Universal)
+      - name: Download macOS Artifact
         uses: actions/download-artifact@v4
         with:
           name: Quacker-macOS-universal
           path: release/macos-universal
-      - name: Download Linux Artifact (x86_64)
+      - name: Download Linux Artifact
         uses: actions/download-artifact@v4
         with:
           name: Quacker-Linux-x86_64
           path: release/linux-x86_64
-      - name: Download Linux Artifact (arm64)
-        uses: actions/download-artifact@v4
-        with:
-          name: Quacker-Linux-arm64
-          path: release/linux-arm64
-      - name: Download Windows Artifact (x86_64)
+      - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
           name: Quacker-Windows-x86_64
           path: release/windows-x86_64
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -206,7 +103,6 @@ jobs:
           files: |
             release/macos-universal/Quacker-macOS-universal.zip
             release/linux-x86_64/Quacker-linux-x86_64.tar.gz
-            release/linux-arm64/Quacker-linux-arm64.tar.gz
             release/windows-x86_64/Quacker-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
