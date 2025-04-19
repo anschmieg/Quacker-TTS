@@ -66,7 +66,7 @@ func main() {
 	}
 
 	a := app.New()
-	w := a.NewWindow("OpenAI TTS Generator")
+	w := a.NewWindow("Quacker – Text to Speech")
 	w.Resize(fyne.NewSize(900, 600))
 
 	instructions := widget.NewMultiLineEntry()
@@ -167,7 +167,7 @@ func main() {
 			return s
 		}
 		payload := map[string]any{
-			"model":           "tts-1",
+			"model":           "gpt-4o-mini-tts",
 			"voice":           voice.Text,
 			"speed":           speed.Value,
 			"input":           clean(input.Text),
