@@ -25,25 +25,25 @@ import (
 
 const (
 	defaultInstructions = `Du bist die Stimme eines deutschsprachigen Lern-Podcasts. Du erklärst Themen klar, ruhig und niedrigschwellig. Zielgruppe: Studierende des Fachs. Sprich natürlich, in einem zügigen, aber gelassenen Tempo. Vermeide jeden Eindruck von Roboter-Stimme oder Werbe-Sprech.
-				Sprechstil:
-				- Sprich zügig, aber ruhig – nicht gehetzt, nicht träge.
-				- Nutze natürliche Intonation: Betone Wichtiges etwas stärker, aber vermeide übertriebene Dynamik oder theatralische Betonung.
-				- Keine künstliche Fröhlichkeit. Klinge kompetent und freundlich, aber zurückhaltend.
+Sprechstil:
+- Sprich zügig, aber ruhig – nicht gehetzt, nicht träge.
+- Nutze natürliche Intonation: Betone Wichtiges etwas stärker, aber vermeide übertriebene Dynamik oder theatralische Betonung.
+- Keine künstliche Fröhlichkeit. Klinge kompetent und freundlich, aber zurückhaltend.
 
-				Pausen:
-				- Setze kurze Pausen (ca. 0,5–1 Sekunde) nach Absätzen und wichtigen Aussagen, damit Hörer:innen mitdenken können.
-				- Füge längere Pausen zwischen Abschnitten oder Kapiteln ein.
-				- **Keine Pausen mitten im Satz**, auch wenn der Text dort einen Umbruch enthält.
+Pausen:
+- Setze kurze Pausen (ca. 0,5–1 Sekunde) nach Absätzen und wichtigen Aussagen, damit Hörer:innen mitdenken können.
+- Füge längere Pausen zwischen Abschnitten oder Kapiteln ein.
+- **Keine Pausen mitten im Satz**, auch wenn der Text dort einen Umbruch enthält.
 
-				Aussprache:
-				- Fremdwörter, Fachbegriffe und Abkürzungen klar und deutlich aussprechen.
-				- Bei Listen: Deutlich zählen („Erstens… Zweitens… Drittens…").
-				- Zwischenüberschriften leicht betonen („Kapitel 2: Datenanalyse").
-				- Beispiele dürfen einen leicht erzählenden Ton haben, um lebendiger zu wirken.
+Aussprache:
+- Fremdwörter, Fachbegriffe und Abkürzungen klar und deutlich aussprechen.
+- Bei Listen: Deutlich zählen („Erstens… Zweitens… Drittens…").
+- Zwischenüberschriften leicht betonen („Kapitel 2: Datenanalyse").
+- Beispiele dürfen einen leicht erzählenden Ton haben, um lebendiger zu wirken.
 
-				Hinweise zur Verarbeitung:
-				- Abschnitte in Lautschrift bitte vollständig überspringen – **nicht aussprechen**.
-				- Der Text ist Markdown-formatiert – **sprich die Markdown-Symbole nicht aus**, aber nutze sie, um die Rolle eines Text-Elements zu verstehen!`
+Hinweise zur Verarbeitung:
+- Abschnitte in Lautschrift bitte vollständig überspringen – **nicht aussprechen**.
+- Der Text ist Markdown-formatiert – **sprich die Markdown-Symbole nicht aus**, aber nutze sie, um die Rolle eines Text-Elements zu verstehen!`
 	defaultVoice    = "shimmer"
 	defaultSpeed    = 1.25
 	defaultInput    = "Dieser Text wird in Sprache umgewandelt. Ersetze ihn mit deinem eigenen Text."
@@ -51,8 +51,6 @@ const (
 	keychainUser    = "api_token"
 	openAIAPIURL    = "https://api.openai.com/v1/audio/speech"
 )
-
-var responseText *widget.Entry // Made accessible for showError
 
 func main() {
 	loadEnvFiles()
@@ -88,14 +86,18 @@ func main() {
 	input.SetText(defaultInput)
 	inputCont := container.NewScroll(input)
 
-	responseText = widget.NewMultiLineEntry()
-	responseText.Wrapping = fyne.TextWrapWord
-	responseText.Disable()
-	responseScroll := container.NewVScroll(responseText)
-	responseScroll.SetMinSize(fyne.NewSize(0, 50))
+	successText := canvas.NewText("", theme.Color(theme.ColorNamePrimary))
+	successText.Alignment = fyne.TextAlignCenter
+	successText.TextStyle = fyne.TextStyle{Bold: true}
+	successText.Hide()
 
 	errorText := canvas.NewText("", color.RGBA{R: 255, G: 0, B: 0, A: 255})
+	errorText.Alignment = fyne.TextAlignLeading
 	errorText.Hide()
+
+	processingText := canvas.NewText("Processing...", theme.Color(theme.ColorNameForeground))
+	processingText.Alignment = fyne.TextAlignCenter
+	processingText.Hide()
 
 	instrLabel := canvas.NewText("Instructions:", theme.Color(theme.ColorNameForeground))
 	instrLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -142,7 +144,8 @@ func main() {
 	)
 	bottomSection := container.NewVBox(
 		btnRow,
-		responseScroll,
+		processingText,
+		successText,
 		errorText,
 	)
 
@@ -153,7 +156,7 @@ func main() {
 
 	submitBtn.OnTapped = func() {
 		if apiKey == "" {
-			showError(w, content, errorText, "Error: API Key not configured. Set OPENAI_API_KEY environment variable or store in keychain.")
+			showError(w, content, errorText, successText, processingText, "Error: API Key not configured. Set OPENAI_API_KEY environment variable or store in keychain.")
 			return
 		}
 		clean := func(s string) string {
@@ -175,32 +178,50 @@ func main() {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		req.Header.Set("Content-Type", "application/json")
 
+		// Disable button and show processing message
+		submitBtn.Disable()
+		processingText.Show()
+		successText.Hide()
 		errorText.Hide()
-		responseText.SetText("Submitting request...")
-		responseText.Refresh()
+		processingText.Refresh()
+		successText.Refresh()
+		errorText.Refresh()
 
 		go func() {
+			// Ensure button is re-enabled when goroutine finishes
+			defer func() {
+				submitBtn.Enable()
+			}()
+
 			client := &http.Client{}
 			resp, err := client.Do(req)
+
 			if err != nil {
-				showError(w, content, errorText, fmt.Sprintf("Request failed: %v", err))
-				return
+				showError(w, content, errorText, successText, processingText, fmt.Sprintf("Request failed: %v", err))
+				return // Button will be re-enabled by defer
 			}
 			defer resp.Body.Close()
 
 			b, readErr := io.ReadAll(resp.Body)
 			if readErr != nil {
-				showError(w, content, errorText, fmt.Sprintf("Failed to read response body: %v", readErr))
-				return
+				showError(w, content, errorText, successText, processingText, fmt.Sprintf("Failed to read response body: %v", readErr))
+				return // Button will be re-enabled by defer
 			}
 
 			if resp.StatusCode != http.StatusOK {
-				errMsg := fmt.Sprintf("Error %d: %s", resp.StatusCode, resp.Status)
+				errMsg := "An error occurred:"
 				if len(b) > 0 {
-					errMsg += fmt.Sprintf("\n%s", string(b))
+					var prettyJSON bytes.Buffer
+					if json.Indent(&prettyJSON, b, "", "  ") == nil {
+						errMsg += "\n" + prettyJSON.String()
+					} else {
+						errMsg += "\n" + string(b)
+					}
+				} else {
+					errMsg += " " + resp.Status
 				}
-				showError(w, content, errorText, errMsg)
-				return
+				showError(w, content, errorText, successText, processingText, errMsg)
+				return // Button will be re-enabled by defer
 			}
 
 			words := strings.Fields(input.Text)
@@ -231,19 +252,24 @@ func main() {
 
 			homeDir, homeErr := os.UserHomeDir()
 			if homeErr != nil {
-				showError(w, content, errorText, fmt.Sprintf("Failed to get home directory: %v", homeErr))
-				return
+				showError(w, content, errorText, successText, processingText, fmt.Sprintf("Failed to get home directory: %v", homeErr))
+				return // Button will be re-enabled by defer
 			}
 			outPath := filepath.Join(homeDir, "Downloads", filename)
 
 			err = os.WriteFile(outPath, b, 0644)
 			if err != nil {
-				showError(w, content, errorText, fmt.Sprintf("Failed to save file: %v", err))
-				return
+				showError(w, content, errorText, successText, processingText, fmt.Sprintf("Failed to save file: %v", err))
+				return // Button will be re-enabled by defer
 			}
 
-			responseText.SetText(fmt.Sprintf("File saved successfully to: %s", outPath))
-			responseText.Refresh()
+			processingText.Hide()
+			successText.Text = "File saved to Downloads"
+			successText.Show()
+			errorText.Hide()
+			processingText.Refresh()
+			successText.Refresh()
+			errorText.Refresh()
 
 			fyne.CurrentApp().SendNotification(&fyne.Notification{
 				Title:   "Success",
@@ -256,14 +282,14 @@ func main() {
 	w.ShowAndRun()
 }
 
-func showError(w fyne.Window, content fyne.CanvasObject, errorText *canvas.Text, msg string) {
+func showError(_ fyne.Window, _ fyne.CanvasObject, errorText *canvas.Text, successText *canvas.Text, processingText *canvas.Text, msg string) {
+	processingText.Hide()
 	errorText.Text = msg
-	errorText.Refresh()
 	errorText.Show()
-	if responseText != nil {
-		responseText.SetText("")
-		responseText.Refresh()
-	}
+	successText.Hide()
+	processingText.Refresh()
+	errorText.Refresh()
+	successText.Refresh()
 }
 
 func loadEnvFiles() {
