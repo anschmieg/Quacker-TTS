@@ -22,7 +22,7 @@ type UI struct {
 	ProcessingText  *canvas.Text
 	SpeedValueLabel *canvas.Text
 
-	// Add other elements as needed
+	ProgressBar *widget.ProgressBar // Progress bar for TTS progress
 }
 
 const (
@@ -77,6 +77,8 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 	ui.SuccessText = createSuccessText()
 	ui.ErrorText = createErrorText()
 	ui.ProcessingText = createProcessingText()
+	ui.ProgressBar = widget.NewProgressBar()
+	ui.ProgressBar.Hide()
 
 	// Layout
 	instrCont := container.NewScroll(ui.Instructions)
@@ -114,6 +116,7 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 	)
 	bottomSection := container.NewVBox(
 		btnRow,
+		ui.ProgressBar, // Progress bar appears above messages
 		ui.ProcessingText,
 		ui.SuccessText,
 		ui.ErrorText,
@@ -162,4 +165,25 @@ func (ui *UI) SetSubmitEnabled(enabled bool) {
 	} else {
 		ui.SubmitBtn.Disable()
 	}
+}
+
+// ShowProgressBar displays the progress bar and hides messages.
+func (ui *UI) ShowProgressBar() {
+	ui.ProgressBar.Show()
+	ui.ProcessingText.Hide()
+	ui.SuccessText.Hide()
+	ui.ErrorText.Hide()
+	ui.ProgressBar.Refresh()
+}
+
+// HideProgressBar hides the progress bar.
+func (ui *UI) HideProgressBar() {
+	ui.ProgressBar.Hide()
+	ui.ProgressBar.Refresh()
+}
+
+// SetProgress sets the progress bar value (0.0 to 1.0).
+func (ui *UI) SetProgress(value float64) {
+	ui.ProgressBar.SetValue(value)
+	ui.ProgressBar.Refresh()
 }

@@ -347,6 +347,24 @@ func splitText(text, model string, maxTokens int) []string {
 	return finalChunks
 }
 
+// SplitTextForProgress splits text into chunks for progress calculation (same as splitText but exported for UI progress).
+func SplitTextForProgress(text, model string, maxTokens int) []string {
+	return splitText(text, model, maxTokens)
+}
+
+// CountTokens returns the number of tokens in a string for a given model.
+func CountTokens(model, text string) int {
+	enc, err := tiktoken.GetEncoding(model)
+	if err != nil {
+		enc, err = tiktoken.GetEncoding("cl100k_base")
+		if err != nil {
+			return len([]rune(text)) / 3 // fallback: rough estimate
+		}
+	}
+	toks := enc.Encode(text, nil, nil)
+	return len(toks)
+}
+
 // GenerateSpeechChunks splits the request input into sub-chunks, sends them in parallel at up to 1/sec,
 // and concatenates the resulting audio blobs.
 func (c *Client) GenerateSpeechChunks(req Request) ([]byte, error) {
