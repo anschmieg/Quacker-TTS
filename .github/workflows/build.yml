@@ -17,10 +17,11 @@ jobs:
         with:
           go-version: "1.23"
       - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+        # Use the new tool path
+        run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for macOS (Universal)
-        # Use -arch universal to build for both amd64 and arm64
-        run: fyne package -os darwin -arch universal -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+        # Remove -arch universal, rely on default behavior or env vars if needed
+        run: fyne package -os darwin -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -39,7 +40,8 @@ jobs:
       - name: Install Linux Build Dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
       - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+        # Use the new tool path
+        run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for Linux (x86_64)
         # No -arch needed, defaults to runner arch (amd64)
         run: fyne package -os linux -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
@@ -73,14 +75,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross libgl1-mesa-dev xorg-dev
       - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+        # Use the new tool path
+        run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for Linux (arm64)
         # Set environment variables for cross-compilation
         env:
           CC: aarch64-linux-gnu-gcc
           GOOS: linux
           GOARCH: arm64
-        run: fyne package -os linux -arch arm64 -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+        # Remove -arch arm64, rely on GOARCH env var
+        run: fyne package -os linux -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
       - name: Tar Linux Build (arm64)
         run: tar czvf Quacker-linux-arm64.tar.gz Quacker
       - name: Upload Linux Artifact (arm64)
@@ -99,7 +103,8 @@ jobs:
         with:
           go-version: "1.23"
       - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+        # Use the new tool path
+        run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for Windows (x86_64)
         # No -arch needed, defaults to runner arch (amd64)
         run: fyne package -os windows -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
