@@ -167,7 +167,7 @@ func main() {
 			return s
 		}
 		payload := map[string]any{
-			"model":           "tts-1",
+			"model":           "gpt-4o-mini-tts",
 			"voice":           voice.Text,
 			"speed":           speed.Value,
 			"input":           clean(input.Text),
