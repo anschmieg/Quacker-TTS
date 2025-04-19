@@ -21,7 +21,7 @@ jobs:
         run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for macOS (Universal)
         # Remove -arch universal, rely on default behavior or env vars if needed
-        run: fyne package -os darwin -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+        run: fyne package -os darwin -name 'Quacker' -app-id com.anschmieg.quacker -icon Icon.png
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -44,7 +44,7 @@ jobs:
         run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for Linux (x86_64)
         # No -arch needed, defaults to runner arch (amd64)
-        run: fyne package -os linux -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+        run: fyne package -os linux -name 'Quacker' -app-id com.anschmieg.quacker -icon Icon.png
       - name: Tar Linux Build (x86_64)
         run: tar czvf Quacker-linux-x86_64.tar.gz Quacker # Updated archive name
       - name: Upload Linux Artifact (x86_64)
@@ -84,7 +84,7 @@ jobs:
           GOOS: linux
           GOARCH: arm64
         # Remove -arch arm64, rely on GOARCH env var
-        run: fyne package -os linux -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+        run: fyne package -os linux -name 'Quacker' -app-id com.anschmieg.quacker -icon Icon.png
       - name: Tar Linux Build (arm64)
         run: tar czvf Quacker-linux-arm64.tar.gz Quacker
       - name: Upload Linux Artifact (arm64)
@@ -107,7 +107,7 @@ jobs:
         run: go install fyne.io/tools/cmd/fyne@latest
       - name: Build Fyne App for Windows (x86_64)
         # No -arch needed, defaults to runner arch (amd64)
-        run: fyne package -os windows -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+        run: fyne package -os windows -name 'Quacker' -app-id com.anschmieg.quacker -icon Icon.png
       - name: Zip Windows Build (x86_64)
         run: Compress-Archive -Path Quacker.exe -DestinationPath Quacker-windows-x86_64.zip # Updated archive name
       - name: Upload Windows Artifact (x86_64)
