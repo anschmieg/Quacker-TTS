@@ -30,7 +30,7 @@ jobs:
           security set-keychain-settings -lut 21600 build.keychain
       - name: Import certificate to keychain
         run: |
-          security import quacker-selfsigned.p12 -k build.keychain -P "${{ secrets.MACOS_CERT_PASSWORD }}" -T /usr/bin/codesign
+          security import quacker-selfsigned.p12 -k build.keychain -P '${{ secrets.MACOS_CERT_PASSWORD }}' -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "temp_keychain_password" build.keychain
       - name: Build and codesign macOS App (Universal)
         run: |
@@ -55,14 +55,31 @@ jobs:
           go-version: "1.23"
       - name: Install fyne-cross
         run: go install github.com/fyne-io/fyne-cross@latest
-      - name: Build Linux (x86_64) and Windows (x86_64)
-        run: |
-          fyne-cross linux -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
-          fyne-cross windows -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
+
+      # Linux build steps
+      - name: Build Linux (x86_64)
+        run: fyne-cross linux -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
+      - name: Debug Linux output directory after build
+        run: ls -la fyne-cross/dist/linux-amd64
+      - name: Check Linux binary exists
+        run: test -f fyne-cross/dist/linux-amd64/Quacker && echo "Linux binary exists" || (echo "Linux binary missing!" && exit 1)
       - name: Archive Linux Build
         run: tar czvf Quacker-linux-x86_64.tar.gz -C fyne-cross/dist/linux-amd64 Quacker
+      - name: Debug Linux archive
+        run: ls -lh Quacker-linux-x86_64.tar.gz
+
+      # Windows build steps
+      - name: Build Windows (x86_64)
+        run: fyne-cross windows -arch=amd64 -name='Quacker' -app-id='com.anschmieg.quacker' -icon='Icon.png'
+      - name: Debug Windows output directory after build
+        run: ls -la fyne-cross/dist/windows-amd64
+      - name: Check Windows binary exists
+        run: test -f fyne-cross/dist/windows-amd64/Quacker.exe && echo "Windows binary exists" || (echo "Windows binary missing!" && exit 1)
       - name: Zip Windows Build
         run: zip -j Quacker-windows-x86_64.zip fyne-cross/dist/windows-amd64/Quacker.exe
+      - name: Debug Windows archive
+        run: ls -lh Quacker-windows-x86_64.zip
+
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:

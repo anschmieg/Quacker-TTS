@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	keychainService = "OpenAI_TTS"
+	keychainService = "Quacker_OpenAI" // Service name for keychain
 	keychainUser    = "api_token"
 )
 
