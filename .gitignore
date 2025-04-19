@@ -1,0 +1,48 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.app/
+
+# Vendor directory
+/vendor/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Fyne build artifacts
+fyne-app
+fyne-app.exe
+fyne-app.dmg
+fyne-app.tar.gz
+fyne-app.zip
+fyne-app.apk
+fyne-app.ipa
+fyne-app.app
+fyne-app-linux
+fyne-app-windows
+fyne-app-mac
+fyne-app-ios
+fyne-app-android

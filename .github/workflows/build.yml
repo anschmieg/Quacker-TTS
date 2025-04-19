@@ -1,0 +1,166 @@
+name: Build & Release Fyne App
+
+on:
+  push:
+    tags:
+      - "v*.*.*" # Trigger on version tags like v1.0.0
+
+jobs:
+  build-macos-universal:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: Build Fyne App for macOS (Universal)
+        # Use -arch universal to build for both amd64 and arm64
+        run: fyne package -os darwin -arch universal -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quacker-macOS-universal # Updated artifact name to match download
+          path: Quacker.app
+
+  build-linux-x86_64: # Updated job name
+    runs-on: ubuntu-latest # Default amd64 runner
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Install Linux Build Dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: Build Fyne App for Linux (x86_64)
+        # No -arch needed, defaults to runner arch (amd64)
+        run: fyne package -os linux -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+      - name: Tar Linux Build (x86_64)
+        run: tar czvf Quacker-linux-x86_64.tar.gz Quacker # Updated archive name
+      - name: Upload Linux Artifact (x86_64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quacker-Linux-x86_64 # Updated artifact name
+          path: Quacker-linux-x86_64.tar.gz
+
+  build-linux-arm64: # New job for Linux arm64
+    # Note: GitHub-hosted ARM64 runners might require specific setup or larger runner types.
+    # Using 'ubuntu-latest' here and relying on cross-compilation flags,
+    # but this might be slow or require QEMU setup if C dependencies are complex.
+    # Consider self-hosted ARM64 runners for better performance/reliability.
+    runs-on: ubuntu-latest # Or potentially a specific ARM runner label if available/configured
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      # Optional: Setup QEMU for cross-compilation if needed (uncomment if build fails)
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v3
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Install Linux Build Dependencies for ARM64
+        # Install cross-compilation tools and ARM64 libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross libgl1-mesa-dev xorg-dev
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: Build Fyne App for Linux (arm64)
+        # Set environment variables for cross-compilation
+        env:
+          CC: aarch64-linux-gnu-gcc
+          GOOS: linux
+          GOARCH: arm64
+        run: fyne package -os linux -arch arm64 -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+      - name: Tar Linux Build (arm64)
+        run: tar czvf Quacker-linux-arm64.tar.gz Quacker
+      - name: Upload Linux Artifact (arm64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quacker-Linux-arm64
+          path: Quacker-linux-arm64.tar.gz
+
+  build-windows-x86_64:
+    runs-on: windows-latest # Default amd64 runner
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: Build Fyne App for Windows (x86_64)
+        # No -arch needed, defaults to runner arch (amd64)
+        run: fyne package -os windows -name 'Quacker' -appID com.anschmieg.quacker -icon Icon.png
+      - name: Zip Windows Build (x86_64)
+        run: Compress-Archive -Path Quacker.exe -DestinationPath Quacker-windows-x86_64.zip # Updated archive name
+      - name: Upload Windows Artifact (x86_64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quacker-Windows-x86_64
+          path: Quacker-windows-x86_64.zip
+
+  release:
+    needs:
+      [
+        build-macos-universal,
+        build-linux-x86_64,
+        build-linux-arm64,
+        build-windows-x86_64,
+      ]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      # Download all artifacts
+      - name: Download macOS Artifact (Universal)
+        uses: actions/download-artifact@v4
+        with:
+          name: Quacker-macOS-universal
+          path: release/macos-universal
+      - name: Download Linux Artifact (x86_64)
+        uses: actions/download-artifact@v4
+        with:
+          name: Quacker-Linux-x86_64
+          path: release/linux-x86_64
+      - name: Download Linux Artifact (arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: Quacker-Linux-arm64
+          path: release/linux-arm64
+      - name: Download Windows Artifact (x86_64)
+        uses: actions/download-artifact@v4
+        with:
+          name: Quacker-Windows-x86_64
+          path: release/windows-x86_64
+
+      # Zip the macOS .app bundle
+      - name: Zip macOS App (Universal)
+        run: |
+          cd release/macos-universal
+          zip -r ../Quacker-macOS-universal.zip Quacker.app
+          cd ../..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          # Update files list
+          files: |
+            release/Quacker-macOS-universal.zip
+            release/linux-x86_64/Quacker-linux-x86_64.tar.gz # Updated path/filename
+            release/linux-arm64/Quacker-linux-arm64.tar.gz
+            release/windows-x86_64/Quacker-windows-x86_64.zip # Updated path/filename
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
