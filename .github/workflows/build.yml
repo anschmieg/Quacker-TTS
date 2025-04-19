@@ -1,6 +1,7 @@
 name: Build & Release Fyne App
 
 on:
+  workflow_dispatch: {} # Allow manual triggering
   push:
     tags:
       - "v*.*.*" # Trigger on version tags like v1.0.0

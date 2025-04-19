@@ -7,9 +7,6 @@ A simple cross-platform desktop application for generating speech using the Open
    It should work on other platforms (Linux, Windows) as well, but there may be some issues. If you encounter any problems, please open an issue on the GitHub repository.
 2. This is a personal project and not an official OpenAI product. It is not affiliated with or endorsed by OpenAI.
 
-<!-- ![Screenshot](placeholder.png)  -->
-<!-- *(Suggestion: Add a screenshot of the app here)* -->
-
 ## Features
 
 *   Generate speech from text using custom-defined OpenAI voices.
