@@ -132,20 +132,27 @@ func main() {
 // handleSubmit processes the submit action
 func handleSubmit(ui *gui.UI, ttsClient *tts.Client, apiKey string) {
 	if apiKey == "" || ttsClient == nil {
-		ui.ShowError("Error: API Key not configured. Set OPENAI_API_KEY environment variable or store in keychain.")
+		fyne.Do(func() {
+			ui.ShowError("Error: API Key not configured. Set OPENAI_API_KEY environment variable or store in keychain.")
+		})
 		return
 	}
 
-	ui.SetSubmitEnabled(false)
-	ui.ShowProgressBar()
-	ui.SetProgress(0)
+	fyne.Do(func() {
+		ui.SetSubmitEnabled(false)
+		ui.ShowProgressBar()
+		ui.SetProgress(0)
+		ui.SetProcessingMessage("Starting TTS processing...")
+	})
 
 	inputText := ui.Input.Text
 	voice := ui.Voice.Text
 	speed := ui.Speed.Value
 
 	go func(inputText, voice string, speed float64) {
-		defer ui.SetSubmitEnabled(true)
+		defer fyne.DoAndWait(func() {
+			ui.SetSubmitEnabled(true)
+		})
 
 		requestData := tts.Request{
 			Model:          "gpt-4o-mini-tts",
@@ -156,7 +163,6 @@ func handleSubmit(ui *gui.UI, ttsClient *tts.Client, apiKey string) {
 		}
 
 		// --- Progress calculation setup ---
-		// Weights: x=10, y=5 per chunk, z=2 per chunk (if >1), 1 per token
 		maxTokens := 2000
 		model := requestData.Model
 		chunks := tts.SplitTextForProgress(inputText, model, maxTokens)
@@ -176,59 +182,73 @@ func handleSubmit(ui *gui.UI, ttsClient *tts.Client, apiKey string) {
 		}
 		progress := 0.0
 
-		// After initial computation
 		progress += x
-		ui.SetProgress(progress / total)
+		fyne.Do(func() {
+			ui.SetProgress(progress / total)
+			ui.SetProcessingMessage(fmt.Sprintf("Preparing %d chunk(s) for synthesis...", numChunks))
+		})
 
-		// --- Chunk processing ---
 		results := make([][]byte, numChunks)
 		hasErr := false
 		for i, chunk := range chunks {
-			// Simulate request interval (real code: <-ticker.C)
+			fyne.Do(func() {
+				ui.SetProcessingMessage(fmt.Sprintf("Processing chunk %d of %d...", i+1, numChunks))
+			})
 			subReq := requestData
 			subReq.Input = chunk
 			data, err := ttsClient.GenerateSpeech(subReq)
 			results[i] = data
 			if err != nil {
 				hasErr = true
-				ui.HideProgressBar()
-				ui.ShowError(fmt.Sprintf("TTS Generation failed: %v", err))
+				fyne.Do(func() {
+					ui.HideProgressBar()
+					ui.ShowError(fmt.Sprintf("TTS Generation failed: %v", err))
+				})
 				return
 			}
 			progress += y + float64(tokenCounts[i])
-			ui.SetProgress(progress / total)
+			fyne.Do(func() {
+				ui.SetProgress(progress / total)
+			})
 		}
 
-		// After combining chunks (if >1)
 		if numChunks > 1 {
 			progress += z * float64(numChunks)
-			ui.SetProgress(progress / total)
+			fyne.Do(func() {
+				ui.SetProgress(progress / total)
+				ui.SetProcessingMessage("Combining audio chunks...")
+			})
 		}
 
 		if hasErr {
 			return
 		}
 
-		// Concatenate audio
 		var audioData []byte
 		for _, blob := range results {
 			audioData = append(audioData, blob...)
 		}
 
 		filename := util.GenerateFilename(inputText)
+		fyne.Do(func() {
+			ui.SetProcessingMessage("Saving audio file...")
+		})
 		savedPath, err := util.SaveAudioFile(audioData, filename)
 		if err != nil {
-			ui.HideProgressBar()
-			ui.ShowError(fmt.Sprintf("Failed to save file: %v", err))
+			fyne.Do(func() {
+				ui.HideProgressBar()
+				ui.ShowError(fmt.Sprintf("Failed to save file: %v", err))
+			})
 			return
 		}
 
-		ui.HideProgressBar()
-		ui.ShowSuccess(fmt.Sprintf("File saved to %s", filepath.Base(savedPath)))
-
-		fyne.CurrentApp().SendNotification(&fyne.Notification{
-			Title:   "Success",
-			Content: fmt.Sprintf("Audio saved to: %s", filepath.Base(savedPath)),
+		fyne.Do(func() {
+			ui.HideProgressBar()
+			ui.ShowSuccess(fmt.Sprintf("File saved to %s", filepath.Base(savedPath)))
+			fyne.CurrentApp().SendNotification(&fyne.Notification{
+				Title:   "Success",
+				Content: fmt.Sprintf("Audio saved to: %s", filepath.Base(savedPath)),
+			})
 		})
 	}(inputText, voice, speed)
 }

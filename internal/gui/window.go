@@ -164,6 +164,15 @@ func (ui *UI) ShowProcessing() {
 	ui.ProcessingText.Refresh()
 }
 
+// SetProcessingMessage updates the processing text field with a status message.
+func (ui *UI) SetProcessingMessage(msg string) {
+	ui.ProcessingText.Text = msg
+	ui.ProcessingText.Show()
+	ui.ProcessingText.Refresh()
+	ui.SuccessText.Hide()
+	ui.ErrorText.Hide()
+}
+
 // SetSubmitEnabled enables or disables the submit button.
 func (ui *UI) SetSubmitEnabled(enabled bool) {
 	if enabled {
