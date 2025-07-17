@@ -18,6 +18,22 @@ func createInstructionsEntry() *widget.Entry {
 	return instructions
 }
 
+// createProviderSelect creates the provider selection widget.
+func createProviderSelect(providers []string, onChanged func(string)) *widget.Select {
+	// Create widget without callback first
+	providerSelect := widget.NewSelect(providers, nil)
+	providerSelect.PlaceHolder = "Select TTS Provider"
+
+	// Set callback after creation to avoid initialization issues
+	providerSelect.OnChanged = func(provider string) {
+		if onChanged != nil {
+			onChanged(provider)
+		}
+	}
+
+	return providerSelect
+}
+
 // createVoiceEntry creates the entry for the voice setting.
 func createVoiceEntry() *widget.Entry {
 	voice := widget.NewEntry()

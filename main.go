@@ -1,9 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"path/filepath"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -16,112 +17,80 @@ import (
 	"easy-tts/internal/gui"
 	"easy-tts/internal/tts"
 	"easy-tts/internal/util"
-
-	keyring "github.com/zalando/go-keyring"
 )
 
 func main() {
-	// Load configuration (API Key)
+	// Load configuration
 	config.LoadEnvFiles()
-	// Configuration for keychain service
-	const keychainService = "Quacker_OpenAI"
-	const keychainUser = "api_token"
-	var apiKey string
-	var ttsClient *tts.Client
+	appConfig, err := config.LoadConfig()
+	if err != nil {
+		fmt.Printf("Error loading configuration: %v\n", err)
+		return
+	}
 
-	// Initial load of API key (env or keychain)
-	env := os.Getenv("OPENAI_API_KEY")
-	chainVal, _ := keyring.Get(keychainService, keychainUser)
-	if env != "" {
-		apiKey = env
-		ttsClient = tts.NewClient(apiKey)
-	} else if chainVal != "" {
-		apiKey = chainVal
-		ttsClient = tts.NewClient(apiKey)
+	// Create TTS provider configuration
+	providerConfig := &tts.ProviderConfig{
+		OpenAIAPIKey:    appConfig.OpenAIAPIKey,
+		GoogleProjectID: appConfig.GoogleProjectID,
+		DefaultProvider: appConfig.DefaultProvider,
+	}
+
+	// Initialize TTS manager
+	ttsManager := tts.NewManager(providerConfig)
+
+	// Get available providers
+	availableProviders := ttsManager.GetAvailableProviders()
+	if len(availableProviders) == 0 {
+		fmt.Println("No TTS providers configured. Please configure at least one provider.")
 	}
 
 	// Placeholder for settings dialog callback
 	var showSettings func()
 
 	// Initialize the Fyne app
-	a := app.New() // a is fyne.App
+	a := app.New()
 
-	// Create the UI with onSubmit and onSettings callbacks
-	var ui *gui.UI
-	ui = gui.NewUI(a,
-		func() { handleSubmit(ui, ttsClient, apiKey) },
-		func() { showSettings() },
-	)
-
-	// Define settings dialog function for selecting or entering API key
-	showSettings = func() {
-		// Prepare select and conditional widgets
-		env := os.Getenv("OPENAI_API_KEY")
-		chain, _ := keyring.Get(keychainService, keychainUser)
-		choices := []string{}
-		if env != "" {
-			choices = append(choices, "Environment variable")
+	// Current provider state
+	var currentProvider string
+	if len(availableProviders) > 0 {
+		currentProvider = availableProviders[0]
+		if appConfig.DefaultProvider != "" {
+			currentProvider = appConfig.DefaultProvider
 		}
-		if chain != "" {
-			choices = append(choices, "Keychain")
-		}
-		choices = append(choices, "Enter new key")
-
-		sel := widget.NewSelect(choices, nil)
-		sel.PlaceHolder = "Select API Key Source"
-
-		entry := widget.NewPasswordEntry()
-
-		// Initial dialog content using FormLayout for spacing
-		content := container.New(layout.NewFormLayout(),
-			widget.NewLabel("Source"), sel,
-		)
-
-		// Create custom confirmation dialog
-		dlg := dialog.NewCustomConfirm("API Key Settings", "OK", "Cancel", content, func(ok bool) {
-			if !ok {
-				return
-			}
-			// Determine final API key
-			switch sel.Selected {
-			case "Environment variable":
-				apiKey = env
-			case "Keychain":
-				apiKey = chain
-			case "Enter new key":
-				if entry.Text == "" {
-					return
-				}
-				apiKey = entry.Text
-				keyring.Set(keychainService, keychainUser, apiKey)
-			default:
-				return
-			}
-			ttsClient = tts.NewClient(apiKey)
-		}, ui.Window)
-
-		// Update dialog when selection changes
-		sel.OnChanged = func(c string) {
-			// Rebuild content with conditional row
-			objs := []fyne.CanvasObject{
-				widget.NewLabel("Source"), sel,
-			}
-			if c == "Enter new key" {
-				objs = append(objs,
-					widget.NewLabel("API Key (for New)"), entry,
-				)
-			}
-			content.Objects = objs
-			content.Refresh()
-			dlg.Resize(content.MinSize().Add(fyne.NewSize(0, 40)))
-		}
-
-		// Show the dialog
-		dlg.Show()
 	}
 
-	// Show settings dialog at startup only if API key not found
-	if apiKey == "" {
+	// Track initialization state
+	var uiInitialized bool
+
+	// Create the UI with callbacks
+	var ui *gui.UI
+	ui = gui.NewUI(a, availableProviders,
+		func() { handleSubmit(ui, ttsManager, currentProvider) },
+		func() { showSettings() },
+		func(provider string) {
+			currentProvider = provider
+			if uiInitialized {
+				updateVoiceForProvider(ui, ttsManager, provider)
+			}
+		},
+	)
+
+	// Mark UI as initialized
+	uiInitialized = true
+
+	// Define settings dialog function for configuring providers
+	showSettings = func() {
+		showProviderSettingsDialog(ui, ttsManager, &currentProvider)
+	}
+
+	// Set initial provider after UI is fully initialized
+	if currentProvider != "" {
+		ui.ProviderSelect.SetSelected(currentProvider)
+		updateVoiceForProvider(ui, ttsManager, currentProvider)
+	}
+
+	// Show settings dialog at startup only if no providers are configured
+	if len(availableProviders) == 0 {
 		showSettings()
 	}
 
@@ -130,10 +99,18 @@ func main() {
 }
 
 // handleSubmit processes the submit action
-func handleSubmit(ui *gui.UI, ttsClient *tts.Client, apiKey string) {
-	if apiKey == "" || ttsClient == nil {
+func handleSubmit(ui *gui.UI, ttsManager *tts.Manager, providerName string) {
+	if providerName == "" {
 		fyne.Do(func() {
-			ui.ShowError("Error: API Key not configured. Set OPENAI_API_KEY environment variable or store in keychain.")
+			ui.ShowError("Error: No TTS provider selected.")
+		})
+		return
+	}
+
+	// Validate provider configuration
+	if err := ttsManager.ValidateProvider(providerName); err != nil {
+		fyne.Do(func() {
+			ui.ShowError(fmt.Sprintf("Provider '%s' configuration error: %v", providerName, err))
 		})
 		return
 	}
@@ -154,86 +131,44 @@ func handleSubmit(ui *gui.UI, ttsClient *tts.Client, apiKey string) {
 			ui.SetSubmitEnabled(true)
 		})
 
-		requestData := tts.Request{
-			Model:          "gpt-4o-mini-tts",
-			Voice:          voice,
-			Speed:          speed,
-			Input:          inputText,
-			ResponseFormat: "mp3",
+		// Create unified request
+		request := &tts.UnifiedRequest{
+			Text:   inputText,
+			Voice:  voice,
+			Speed:  speed,
+			Format: "mp3",
 		}
 
-		// --- Progress calculation setup ---
-		maxTokens := 2000
-		model := requestData.Model
-		chunks := tts.SplitTextForProgress(inputText, model, maxTokens)
-		numChunks := len(chunks)
-		tokenCounts := make([]int, numChunks)
-		totalTokens := 0
-		for i, c := range chunks {
-			tokenCounts[i] = tts.CountTokens(model, c)
-			totalTokens += tokenCounts[i]
+		// Add provider-specific fields
+		if providerName == "openai" {
+			request.Model = "gpt-4o-mini-tts"
 		}
-		x := 10.0
-		y := 5.0
-		z := 2.0
-		total := x + y*float64(numChunks) + float64(totalTokens)
-		if numChunks > 1 {
-			total += z * float64(numChunks)
-		}
-		progress := 0.0
 
-		progress += x
+		// Create context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
 		fyne.Do(func() {
-			ui.SetProgress(progress / total)
-			ui.SetProcessingMessage(fmt.Sprintf("Preparing %d chunk(s) for synthesis...", numChunks))
+			ui.SetProcessingMessage("Generating speech...")
 		})
 
-		results := make([][]byte, numChunks)
-		hasErr := false
-		for i, chunk := range chunks {
+		// Generate speech using the manager
+		response, err := ttsManager.GenerateSpeech(ctx, request, providerName)
+		if err != nil {
 			fyne.Do(func() {
-				ui.SetProcessingMessage(fmt.Sprintf("Processing chunk %d of %d...", i+1, numChunks))
+				ui.HideProgressBar()
+				ui.ShowError(fmt.Sprintf("TTS Generation failed: %v", err))
 			})
-			subReq := requestData
-			subReq.Input = chunk
-			data, err := ttsClient.GenerateSpeech(subReq)
-			results[i] = data
-			if err != nil {
-				hasErr = true
-				fyne.Do(func() {
-					ui.HideProgressBar()
-					ui.ShowError(fmt.Sprintf("TTS Generation failed: %v", err))
-				})
-				return
-			}
-			progress += y + float64(tokenCounts[i])
-			fyne.Do(func() {
-				ui.SetProgress(progress / total)
-			})
-		}
-
-		if numChunks > 1 {
-			progress += z * float64(numChunks)
-			fyne.Do(func() {
-				ui.SetProgress(progress / total)
-				ui.SetProcessingMessage("Combining audio chunks...")
-			})
-		}
-
-		if hasErr {
 			return
 		}
 
-		var audioData []byte
-		for _, blob := range results {
-			audioData = append(audioData, blob...)
-		}
-
-		filename := util.GenerateFilename(inputText)
 		fyne.Do(func() {
+			ui.SetProgress(0.8)
 			ui.SetProcessingMessage("Saving audio file...")
 		})
-		savedPath, err := util.SaveAudioFile(audioData, filename)
+
+		filename := util.GenerateFilename(inputText)
+		savedPath, err := util.SaveAudioFile(response.AudioData, filename)
 		if err != nil {
 			fyne.Do(func() {
 				ui.HideProgressBar()
@@ -244,11 +179,110 @@ func handleSubmit(ui *gui.UI, ttsClient *tts.Client, apiKey string) {
 
 		fyne.Do(func() {
 			ui.HideProgressBar()
-			ui.ShowSuccess(fmt.Sprintf("File saved to %s", filepath.Base(savedPath)))
+			ui.ShowSuccess(fmt.Sprintf("File saved to %s (Provider: %s)", filepath.Base(savedPath), response.Provider))
 			fyne.CurrentApp().SendNotification(&fyne.Notification{
 				Title:   "Success",
 				Content: fmt.Sprintf("Audio saved to: %s", filepath.Base(savedPath)),
 			})
 		})
 	}(inputText, voice, speed)
+}
+
+// updateVoiceForProvider updates the voice field with the provider's default voice
+func updateVoiceForProvider(ui *gui.UI, ttsManager *tts.Manager, providerName string) {
+	if ui == nil || providerName == "" {
+		return
+	}
+
+	provider, err := ttsManager.GetProvider(providerName)
+	if err != nil {
+		return
+	}
+
+	defaultVoice := provider.GetDefaultVoice()
+	ui.Voice.SetText(defaultVoice)
+}
+
+// showProviderSettingsDialog shows the provider configuration dialog
+func showProviderSettingsDialog(ui *gui.UI, ttsManager *tts.Manager, currentProvider *string) {
+	// Create tabs for different providers
+	tabs := container.NewAppTabs()
+
+	// OpenAI tab
+	openAIAPIKeyEntry := widget.NewPasswordEntry()
+	openAIAPIKeyEntry.SetText(ttsManager.GetConfig().OpenAIAPIKey)
+
+	openAIContent := container.New(layout.NewFormLayout(),
+		widget.NewLabel("API Key:"), openAIAPIKeyEntry,
+	)
+	tabs.Append(container.NewTabItem("OpenAI", openAIContent))
+
+	// Google Cloud tab
+	googleProjectEntry := widget.NewEntry()
+	googleProjectEntry.SetText(ttsManager.GetConfig().GoogleProjectID)
+
+	googleContent := container.New(layout.NewFormLayout(),
+		widget.NewLabel("Project ID:"), googleProjectEntry,
+		widget.NewLabel("Auth:"), widget.NewLabel("Uses gcloud auth"),
+	)
+	tabs.Append(container.NewTabItem("Google Cloud", googleContent))
+
+	// Provider selection
+	providerInfo := ttsManager.GetProviderInfo()
+	var providerNames []string
+	for _, info := range providerInfo {
+		providerNames = append(providerNames, info.Name)
+	}
+
+	defaultProviderSelect := widget.NewSelect(providerNames, nil)
+	defaultProviderSelect.SetSelected(ttsManager.GetConfig().DefaultProvider)
+
+	mainContent := container.NewVBox(
+		tabs,
+		container.New(layout.NewFormLayout(),
+			widget.NewLabel("Default Provider:"), defaultProviderSelect,
+		),
+	)
+
+	dialog := dialog.NewCustomConfirm("Provider Settings", "Save", "Cancel", mainContent, func(ok bool) {
+		if !ok {
+			return
+		}
+
+		// Update configuration
+		newConfig := &tts.ProviderConfig{
+			OpenAIAPIKey:    openAIAPIKeyEntry.Text,
+			GoogleProjectID: googleProjectEntry.Text,
+			DefaultProvider: defaultProviderSelect.Selected,
+		}
+
+		// Save to keychain
+		if openAIAPIKeyEntry.Text != "" {
+			config.SetOpenAIAPIKey(openAIAPIKeyEntry.Text)
+		}
+		if googleProjectEntry.Text != "" {
+			config.SetGoogleProjectID(googleProjectEntry.Text)
+		}
+
+		// Update manager
+		ttsManager.UpdateConfig(newConfig)
+
+		// Update UI
+		availableProviders := ttsManager.GetAvailableProviders()
+		ui.ProviderSelect.Options = availableProviders
+
+		if len(availableProviders) > 0 {
+			newProvider := newConfig.DefaultProvider
+			if newProvider == "" {
+				newProvider = availableProviders[0]
+			}
+			*currentProvider = newProvider
+			ui.ProviderSelect.SetSelected(newProvider)
+			updateVoiceForProvider(ui, ttsManager, newProvider)
+		}
+
+	}, ui.Window)
+
+	dialog.Resize(fyne.NewSize(500, 400))
+	dialog.Show()
 }

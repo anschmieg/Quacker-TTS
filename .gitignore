@@ -26,6 +26,13 @@ Thumbs.db
 # Environment files
 .env
 .env.*
+.env.local
+.env.production
+
+# Configuration files with sensitive data
+config.json
+credentials.json
+service-account.json
 
 # Temporary files
 *.tmp
@@ -46,3 +53,29 @@ fyne-app-windows
 fyne-app-mac
 fyne-app-ios
 fyne-app-android
+
+# Provider-specific build artifacts
+easy-tts
+easy-tts.exe
+Quacker
+Quacker.exe
+Quacker.app
+Quacker.dmg
+Quacker.deb
+Quacker.rpm
+
+# Test output
+*.mp3
+*.wav
+*.ogg
+test_output/
+
+# Provider configuration backups
+*.p12
+*.pem
+gcloud_config_backup/
+
+# Examples directory sensitive files
+examples/.env
+examples/config.json
+examples/test_output/

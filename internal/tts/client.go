@@ -1,34 +1,41 @@
 package tts
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
 	"net/http"
-
-	"easy-tts/internal/util" // Corrected import path
+	// Corrected import path
 )
 
 const (
 	openAIAPIURL = "https://api.openai.com/v1/audio/speech"
 )
 
-// Client handles communication with the OpenAI TTS API.
-type Client struct {
+// OpenAIProvider handles communication with the OpenAI TTS API.
+type OpenAIProvider struct {
 	APIKey     string
 	HTTPClient *http.Client
 }
 
-// NewClient creates a new TTS client.
-func NewClient(apiKey string) *Client {
-	return &Client{
+// NewOpenAIProvider creates a new OpenAI TTS provider.
+func NewOpenAIProvider(apiKey string) *OpenAIProvider {
+	return &OpenAIProvider{
 		APIKey:     apiKey,
 		HTTPClient: &http.Client{},
 	}
 }
 
-// Request represents the parameters for a TTS request.
+// Client wraps OpenAIProvider for backward compatibility.
+type Client struct {
+	*OpenAIProvider
+}
+
+// NewClient creates a new OpenAI TTS client (backward compatibility).
+func NewClient(apiKey string) *Client {
+	return &Client{OpenAIProvider: NewOpenAIProvider(apiKey)}
+}
+
+// Request represents the parameters for a TTS request (backward compatibility).
 type Request struct {
 	Model          string  `json:"model"`
 	Voice          string  `json:"voice"`
@@ -40,64 +47,57 @@ type Request struct {
 	// Instructions string
 }
 
-// GenerateSpeech sends a request to the OpenAI TTS API and returns the audio data.
+// GetName returns the provider's name.
+func (p *OpenAIProvider) GetName() string {
+	return "openai"
+}
+
+// GetDefaultVoice returns the provider's default voice.
+func (p *OpenAIProvider) GetDefaultVoice() string {
+	return "shimmer"
+}
+
+// GetSupportedFormats returns the audio formats supported by this provider.
+func (p *OpenAIProvider) GetSupportedFormats() []string {
+	return []string{"mp3", "opus", "aac", "flac"}
+}
+
+// ValidateConfig validates the provider's configuration.
+func (p *OpenAIProvider) ValidateConfig() error {
+	if p.APIKey == "" {
+		return fmt.Errorf("OpenAI API key is required")
+	}
+	return nil
+}
+
+// GetMaxTokensPerChunk returns the maximum tokens per request for this provider.
+func (p *OpenAIProvider) GetMaxTokensPerChunk() int {
+	return DefaultTokenLimit
+}
+
+// GenerateSpeech generates speech using the unified request format.
+func (p *OpenAIProvider) GenerateSpeech(ctx context.Context, req *UnifiedRequest) ([]byte, error) {
+	// Convert unified request to OpenAI format
+	openAIReq := Request{
+		Model:          req.Model,
+		Voice:          req.Voice,
+		Speed:          req.Speed,
+		Input:          req.Text,
+		ResponseFormat: req.Format,
+	}
+
+	// Set defaults if not provided
+	if openAIReq.Model == "" {
+		openAIReq.Model = "gpt-4o-mini-tts"
+	}
+	if openAIReq.ResponseFormat == "" {
+		openAIReq.ResponseFormat = "mp3"
+	}
+
+	return p.generateSpeechInternal(openAIReq)
+}
+
+// GenerateSpeech sends a request to the OpenAI TTS API and returns the audio data (backward compatibility).
 func (c *Client) GenerateSpeech(reqData Request) ([]byte, error) {
-	// always split large input into chunks (splitText handles encoding fallbacks)
-	parts := splitText(reqData.Input, reqData.Model, DefaultTokenLimit)
-	if len(parts) > 1 {
-		return c.GenerateSpeechChunks(reqData)
-	}
-
-	if c.APIKey == "" {
-		return nil, fmt.Errorf("API key is not configured")
-	}
-
-	// Prepare payload - clean the input text for JSON
-	payload := map[string]any{
-		"model":           reqData.Model,
-		"voice":           reqData.Voice,
-		"speed":           reqData.Speed,
-		"input":           util.CleanJSONString(reqData.Input),
-		"response_format": reqData.ResponseFormat,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request payload: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", openAIAPIURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", readErr)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		errMsg := fmt.Sprintf("API error (status %d):", resp.StatusCode)
-		if len(respBody) > 0 {
-			// Try to pretty-print JSON error, otherwise show raw body
-			var prettyJSON bytes.Buffer
-			if json.Indent(&prettyJSON, respBody, "", "  ") == nil {
-				errMsg += "\n" + prettyJSON.String()
-			} else {
-				errMsg += "\n" + string(respBody)
-			}
-		} else {
-			errMsg += " " + resp.Status
-		}
-		return nil, fmt.Errorf(errMsg)
-	}
-
-	return respBody, nil
+	return c.OpenAIProvider.generateSpeechInternal(reqData)
 }

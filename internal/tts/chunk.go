@@ -367,7 +367,7 @@ func CountTokens(model, text string) int {
 
 // GenerateSpeechChunks splits the request input into sub-chunks, sends them in parallel at up to 1/sec,
 // and concatenates the resulting audio blobs.
-func (c *Client) GenerateSpeechChunks(req Request) ([]byte, error) {
+func (p *OpenAIProvider) GenerateSpeechChunks(req Request) ([]byte, error) {
 	// determine max tokens per chunk
 	maxTokens := DefaultTokenLimit
 	parts := splitText(req.Input, req.Model, maxTokens)
@@ -384,7 +384,7 @@ func (c *Client) GenerateSpeechChunks(req Request) ([]byte, error) {
 			<-ticker.C
 			subReq := req
 			subReq.Input = textChunk
-			data, err := c.GenerateSpeech(subReq)
+			data, err := p.generateSpeechInternal(subReq)
 			results[i] = data
 			errs[i] = err
 		}(i, chunk)

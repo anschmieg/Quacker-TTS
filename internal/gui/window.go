@@ -13,6 +13,7 @@ import (
 type UI struct {
 	Window          fyne.Window
 	Instructions    *widget.Entry
+	ProviderSelect  *widget.Select
 	Voice           *widget.Entry
 	Speed           *widget.Slider
 	Input           *widget.Entry
@@ -52,7 +53,7 @@ Hinweise zur Verarbeitung:
 )
 
 // NewUI creates and lays out the main application window and its widgets.
-func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
+func NewUI(app fyne.App, providers []string, onSubmit func(), onSettings func(), onProviderChange func(string)) *UI {
 	w := app.NewWindow("Quacker – Text to Speech")
 	w.Resize(fyne.NewSize(900, 600))
 
@@ -68,6 +69,7 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 
 	// Create Widgets (using functions from widgets.go)
 	ui.Instructions = createInstructionsEntry()
+	ui.ProviderSelect = createProviderSelect(providers, onProviderChange)
 	// Create and wrap the voice entry in a fixed-size container to make it wider
 	voiceEntry := createVoiceEntry()
 	voiceMin := voiceEntry.MinSize()
@@ -91,12 +93,16 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 	inputCont := container.NewScroll(ui.Input)
 
 	instrLabel := createLabel("Instructions:", 18, true)
+	providerLabel := createLabel("Provider:", 18, true)
 	voiceLabel := createLabel("Voice:", 18, true)
 	// speedTextLabel := createLabel("Speed:", 18, true) // COMMENTED OUT
 	inputLabel := createLabel("Input Text:", 18, true)
 
 	// Replace grid layout with HBox for right-alignment
-	voiceSpeedRow := container.NewHBox(
+	providerVoiceRow := container.NewHBox(
+		providerLabel,
+		ui.ProviderSelect,
+		layout.NewSpacer(),
 		voiceLabel,
 		voiceContainer,
 		layout.NewSpacer(),
@@ -117,7 +123,7 @@ func NewUI(app fyne.App, onSubmit func(), onSettings func()) *UI {
 	separatorLine := canvas.NewRectangle(theme.Color(theme.ColorNameInputBorder))
 	separatorLine.SetMinSize(fyne.NewSize(0, 1))
 	topSection := container.NewVBox(
-		voiceSpeedRow,
+		providerVoiceRow,
 		separatorLine,
 	)
 	bottomSection := container.NewVBox(
