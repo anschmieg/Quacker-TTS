@@ -19,6 +19,16 @@ const (
 	// Google Cloud keychain configuration
 	googleKeychainService = "Quacker_Google"
 	googleKeychainUser    = "project_id"
+	googleAPIKeyKeychainService = "Quacker_Google_API"
+	googleAPIKeyKeychainUser    = "api_key"
+	googleAuthMethodKeychainService = "Quacker_Google_Auth"
+	googleAuthMethodKeychainUser    = "auth_method"
+)
+
+// Keychain configuration for default provider
+const (
+	defaultProviderKeychainService = "Quacker_DefaultProvider"
+	defaultProviderKeychainUser    = "default"
 )
 
 // Config holds configuration for all TTS providers.
@@ -27,7 +37,9 @@ type Config struct {
 	OpenAIAPIKey string
 
 	// Google Cloud configuration
-	GoogleProjectID string
+	GoogleProjectID  string
+	GoogleAPIKey     string
+	GoogleAuthMethod string
 
 	// Default provider
 	DefaultProvider string
@@ -53,9 +65,14 @@ func LoadConfig() (*Config, error) {
 
 	// Load Google Cloud configuration
 	config.GoogleProjectID = getGoogleProjectID()
+	config.GoogleAPIKey = getGoogleAPIKey()
+	config.GoogleAuthMethod = getGoogleAuthMethod()
 
-	// Set default provider
-	config.DefaultProvider = os.Getenv("DEFAULT_TTS_PROVIDER")
+	// Set default provider from keychain, then env, then auto
+	config.DefaultProvider = GetDefaultProviderFromKeychain()
+	if config.DefaultProvider == "" {
+		config.DefaultProvider = os.Getenv("DEFAULT_TTS_PROVIDER")
+	}
 	if config.DefaultProvider == "" {
 		// Auto-select based on available configuration
 		if config.OpenAIAPIKey != "" {
@@ -153,4 +170,79 @@ func SetOpenAIAPIKey(apiKey string) error {
 // SetGoogleProjectID stores the Google Cloud project ID in the keychain.
 func SetGoogleProjectID(projectID string) error {
 	return keyring.Set(googleKeychainService, googleKeychainUser, projectID)
+}
+
+// SetDefaultProvider stores the default provider in the keychain.
+func SetDefaultProvider(provider string) error {
+	return keyring.Set(defaultProviderKeychainService, defaultProviderKeychainUser, provider)
+}
+
+// GetDefaultProviderFromKeychain retrieves the default provider from the keychain.
+func GetDefaultProviderFromKeychain() string {
+	val, err := keyring.Get(defaultProviderKeychainService, defaultProviderKeychainUser)
+	if err == nil && val != "" {
+		return val
+	}
+	return ""
+}
+
+// getGoogleAPIKey retrieves the Google Cloud API key from environment or keychain.
+func getGoogleAPIKey() string {
+	// Check environment variable first
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey != "" {
+		return apiKey
+	}
+
+	// Check alternative environment variable
+	apiKey = os.Getenv("GOOGLE_CLOUD_API_KEY")
+	if apiKey != "" {
+		return apiKey
+	}
+
+	// Fall back to keychain
+	apiKey, err := keyring.Get(googleAPIKeyKeychainService, googleAPIKeyKeychainUser)
+	if err == nil && apiKey != "" {
+		return apiKey
+	}
+
+	// Log warning but don't block
+	if err != nil && err != keyring.ErrNotFound {
+		fmt.Printf("Warning: Google API key keychain access error: %v\n", err)
+	}
+
+	return ""
+}
+
+// getGoogleAuthMethod retrieves the Google Cloud authentication method from keychain.
+func getGoogleAuthMethod() string {
+	// Check environment variable first
+	method := os.Getenv("GOOGLE_AUTH_METHOD")
+	if method != "" {
+		return method
+	}
+
+	// Fall back to keychain
+	method, err := keyring.Get(googleAuthMethodKeychainService, googleAuthMethodKeychainUser)
+	if err == nil && method != "" {
+		return method
+	}
+
+	// Log warning but don't block
+	if err != nil && err != keyring.ErrNotFound {
+		fmt.Printf("Warning: Google auth method keychain access error: %v\n", err)
+	}
+
+	// Default to gcloud auth
+	return "gcloud auth"
+}
+
+// SetGoogleAPIKey stores the Google Cloud API key in the keychain.
+func SetGoogleAPIKey(apiKey string) error {
+	return keyring.Set(googleAPIKeyKeychainService, googleAPIKeyKeychainUser, apiKey)
+}
+
+// SetGoogleAuthMethod stores the Google Cloud authentication method in the keychain.
+func SetGoogleAuthMethod(method string) error {
+	return keyring.Set(googleAuthMethodKeychainService, googleAuthMethodKeychainUser, method)
 }

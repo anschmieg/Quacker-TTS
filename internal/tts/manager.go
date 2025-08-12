@@ -36,7 +36,11 @@ func (m *Manager) initializeProviders() {
 
 	// Initialize Google provider if project ID is available
 	if m.config.GoogleProjectID != "" {
-		googleProvider := NewGoogleProvider(m.config.GoogleProjectID)
+		authMethod := m.config.GoogleAuthMethod
+		if authMethod == "" {
+			authMethod = "gcloud auth" // Default to gcloud auth
+		}
+		googleProvider := NewGoogleProvider(m.config.GoogleProjectID, m.config.GoogleAPIKey, authMethod)
 		m.providers["google"] = googleProvider
 	}
 
@@ -58,7 +62,17 @@ func (m *Manager) GetProvider(name string) (Provider, error) {
 	if !exists {
 		return nil, fmt.Errorf("provider '%s' not found", name)
 	}
+
 	return provider, nil
+}
+
+// ChunkText splits the input text into chunks based on the provider's token limit.
+func (m *Manager) ChunkText(text string, provider Provider) []string {
+	if provider.GetName() == "google" {
+		return SplitTextByteLimit(text, DefaultByteLimit)
+	}
+	maxTokens := provider.GetMaxTokensPerChunk()
+	return SplitTextTokenLimit(text, "cl100k_base", maxTokens)
 }
 
 // GetDefaultProvider returns the default provider.

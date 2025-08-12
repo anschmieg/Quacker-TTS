@@ -146,65 +146,85 @@ func NewUI(app fyne.App, providers []string, onSubmit func(), onSettings func(),
 
 // ShowError displays an error message in the UI.
 func (ui *UI) ShowError(msg string) {
-	ui.ProcessingText.Hide()
-	ui.ErrorText.Text = msg
-	ui.ErrorText.Show()
-	ui.SuccessText.Hide()
-	ui.ErrorText.Refresh()
+	fyne.Do(func() {
+		ui.ProcessingText.Hide()
+		ui.SuccessText.Hide()
+		ui.ProgressBar.Hide()
+		ui.ErrorText.Text = msg
+		ui.ErrorText.Show()
+		ui.ErrorText.Refresh()
+	})
 }
 
 // ShowSuccess displays a success message in the UI.
 func (ui *UI) ShowSuccess(msg string) {
-	ui.ProcessingText.Hide()
-	ui.SuccessText.Text = msg
-	ui.SuccessText.Show()
-	ui.ErrorText.Hide()
-	ui.SuccessText.Refresh()
+	fyne.Do(func() {
+		ui.ProcessingText.Hide()
+		ui.ErrorText.Hide()
+		ui.ProgressBar.Hide()
+		ui.SuccessText.Text = msg
+		ui.SuccessText.Show()
+		ui.SuccessText.Refresh()
+	})
 }
 
 // ShowProcessing displays the processing indicator.
 func (ui *UI) ShowProcessing() {
-	ui.ProcessingText.Show()
-	ui.SuccessText.Hide()
-	ui.ErrorText.Hide()
-	ui.ProcessingText.Refresh()
+	fyne.Do(func() {
+		ui.ErrorText.Hide()
+		ui.SuccessText.Hide()
+		ui.ProgressBar.Hide()
+		ui.ProcessingText.Show()
+		ui.ProcessingText.Refresh()
+	})
 }
 
 // SetProcessingMessage updates the processing text field with a status message.
 func (ui *UI) SetProcessingMessage(msg string) {
-	ui.ProcessingText.Text = msg
-	ui.ProcessingText.Show()
-	ui.ProcessingText.Refresh()
-	ui.SuccessText.Hide()
-	ui.ErrorText.Hide()
+	fyne.Do(func() {
+		ui.SuccessText.Hide()
+		ui.ErrorText.Hide()
+		ui.ProgressBar.Hide()
+		ui.ProcessingText.Text = msg
+		ui.ProcessingText.Show()
+		ui.ProcessingText.Refresh()
+	})
 }
 
 // SetSubmitEnabled enables or disables the submit button.
 func (ui *UI) SetSubmitEnabled(enabled bool) {
-	if enabled {
-		ui.SubmitBtn.Enable()
-	} else {
-		ui.SubmitBtn.Disable()
-	}
+	fyne.Do(func() {
+		if enabled {
+			ui.SubmitBtn.Enable()
+		} else {
+			ui.SubmitBtn.Disable()
+		}
+	})
 }
 
 // ShowProgressBar displays the progress bar and hides messages.
 func (ui *UI) ShowProgressBar() {
-	ui.ProgressBar.Show()
-	ui.ProcessingText.Hide()
-	ui.SuccessText.Hide()
-	ui.ErrorText.Hide()
-	ui.ProgressBar.Refresh()
+	fyne.Do(func() {
+		ui.ProcessingText.Hide()
+		ui.SuccessText.Hide()
+		ui.ErrorText.Hide()
+		ui.ProgressBar.Show()
+		ui.ProgressBar.Refresh()
+	})
 }
 
 // HideProgressBar hides the progress bar.
 func (ui *UI) HideProgressBar() {
-	ui.ProgressBar.Hide()
-	ui.ProgressBar.Refresh()
+	fyne.Do(func() {
+		ui.ProgressBar.Hide()
+		ui.ProgressBar.Refresh()
+	})
 }
 
 // SetProgress sets the progress bar value (0.0 to 1.0).
 func (ui *UI) SetProgress(value float64) {
-	ui.ProgressBar.SetValue(value)
-	ui.ProgressBar.Refresh()
+	fyne.Do(func() {
+		ui.ProgressBar.SetValue(value)
+		ui.ProgressBar.Refresh()
+	})
 }

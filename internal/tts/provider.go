@@ -4,6 +4,9 @@ import "context"
 
 // Provider defines the interface that all TTS providers must implement.
 type Provider interface {
+	// CheckAuth verifies that the provider is authenticated
+	CheckAuth(ctx context.Context) error
+
 	// GenerateSpeech generates audio from text using the provider's API
 	GenerateSpeech(ctx context.Context, req *UnifiedRequest) ([]byte, error)
 
@@ -51,6 +54,8 @@ type ProviderConfig struct {
 
 	// Google Cloud configuration
 	GoogleProjectID   string
+	GoogleAPIKey      string // Google Cloud API key
+	GoogleAuthMethod  string // "gcloud auth" or "API Key"
 	GoogleCredentials string // Path to service account JSON or JSON content
 
 	// Default provider
