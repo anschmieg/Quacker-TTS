@@ -40,19 +40,39 @@ Choose one or both TTS providers to configure:
 ### Google Cloud TTS Setup
 
 1.  **Google Cloud Project:** Create a project with [Cloud Text-to-Speech API](https://cloud.google.com/text-to-speech) enabled.
-2.  **Authentication:** Install and configure [Google Cloud CLI](https://cloud.google.com/sdk/docs/install):
+
+2.  **Authentication:** Choose one of two authentication methods:
+
+    **Option A: gcloud CLI Authentication (Recommended for Development)**
+
     ```bash
     # Install gcloud CLI, then authenticate
     gcloud auth login
     gcloud config set project YOUR_PROJECT_ID
+    gcloud services enable texttospeech.googleapis.com
     ```
+
+    **Option B: API Key Authentication (Good for Production/CI)**
+
+    ```bash
+    # Get API key from Google Cloud Console
+    # Go to: https://console.cloud.google.com/apis/credentials
+    # Create API Key and restrict to Text-to-Speech API
+    export GOOGLE_API_KEY="your-api-key-here"
+    export GOOGLE_AUTH_METHOD="API Key"
+    ```
+
 3.  **Configure Project ID:** Provide your project ID using one of these methods:
     - **Environment Variable:** Set `GOOGLE_CLOUD_PROJECT` or `GCP_PROJECT`.
-    - **Settings Dialog:** Use the in-app Settings to configure the project ID.
+    - **Settings Dialog:** Use the in-app Settings to configure the project ID and authentication method.
     - **gcloud config:** The app automatically detects your active gcloud project.
     - **.env File:** Add to your `.env` file:
       ```
       GOOGLE_CLOUD_PROJECT=your-project-id
+      GOOGLE_AUTH_METHOD=gcloud auth
+      # Or for API key authentication:
+      # GOOGLE_API_KEY=your-api-key-here
+      # GOOGLE_AUTH_METHOD=API Key
       ```
 
 ### Provider Selection
@@ -150,7 +170,12 @@ You can configure both providers and switch between them:
 # Environment variables for both providers
 export OPENAI_API_KEY="your-openai-key"
 export GOOGLE_CLOUD_PROJECT="your-gcp-project"
+export GOOGLE_AUTH_METHOD="gcloud auth"  # or "API Key"
 export DEFAULT_TTS_PROVIDER="openai"  # or "google"
+
+# If using Google Cloud API key authentication:
+# export GOOGLE_API_KEY="your-google-api-key"
+# export GOOGLE_AUTH_METHOD="API Key"
 ```
 
 ### .env File Example
@@ -158,7 +183,12 @@ export DEFAULT_TTS_PROVIDER="openai"  # or "google"
 ```
 OPENAI_API_KEY=sk-proj-abc123...
 GOOGLE_CLOUD_PROJECT=my-tts-project
+GOOGLE_AUTH_METHOD=gcloud auth
 DEFAULT_TTS_PROVIDER=google
+
+# Alternative: Using Google Cloud API key
+# GOOGLE_API_KEY=your-google-api-key-here
+# GOOGLE_AUTH_METHOD=API Key
 ```
 
 ## License
