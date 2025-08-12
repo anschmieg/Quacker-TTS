@@ -151,37 +151,107 @@ test_google() {
 
     # Test API access
     print_info "Testing Google Cloud TTS API access..."
-    local access_token
-    access_token=$(gcloud auth print-access-token 2>/dev/null || echo "")
 
-    if [ -z "$access_token" ]; then
-        print_error "Could not get access token"
+    # Check if we should use API key or gcloud auth
+    local auth_method="${GOOGLE_AUTH_METHOD:-gcloud auth}"
+
+    # Check for API key in environment first, regardless of auth method setting
+    local google_api_key="${GOOGLE_API_KEY:-${GOOGLE_CLOUD_API_KEY:-}}"
+
+    if [ -n "$google_api_key" ] && [ "$auth_method" = "API Key" ]; then
+        # Test with API key
+        print_info "Using API key authentication (from environment)"
+
+        if command -v curl >/dev/null 2>&1; then
+            local response
+            response=$(curl -s -w "%{http_code}" -o /dev/null \
+                -H "Content-Type: application/json" \
+                -H "X-Goog-Api-Key: $google_api_key" \
+                -H "X-Goog-User-Project: $project_id" \
+                -d '{
+                    "input": {"text": "test"},
+                    "voice": {"languageCode": "en-US", "name": "en-US-Neural2-A"},
+                    "audioConfig": {"audioEncoding": "MP3"}
+                }' \
+                https://texttospeech.googleapis.com/v1/text:synthesize)
+
+            if [ "$response" = "200" ]; then
+                print_success "Google Cloud TTS API connection successful (API Key)"
+                return 0
+            else
+                print_error "Google Cloud TTS API connection failed (HTTP $response)"
+                return 1
+            fi
+        else
+            print_warning "curl not available, skipping API connection test"
+            return 0
+        fi
+    elif [ -n "$google_api_key" ] && [ "$auth_method" != "API Key" ]; then
+        # Test API key method even if auth method is set to gcloud auth
+        print_info "Found API key in environment, testing API key authentication"
+
+        if command -v curl >/dev/null 2>&1; then
+            local response
+            response=$(curl -s -w "%{http_code}" -o /dev/null \
+                -H "Content-Type: application/json" \
+                -H "X-Goog-Api-Key: $google_api_key" \
+                -H "X-Goog-User-Project: $project_id" \
+                -d '{
+                    "input": {"text": "test"},
+                    "voice": {"languageCode": "en-US", "name": "en-US-Neural2-A"},
+                    "audioConfig": {"audioEncoding": "MP3"}
+                }' \
+                https://texttospeech.googleapis.com/v1/text:synthesize)
+
+            if [ "$response" = "200" ]; then
+                print_success "Google Cloud TTS API connection successful (API Key from env)"
+            else
+                print_warning "Google Cloud TTS API key test failed (HTTP $response)"
+            fi
+        fi
+
+        # Continue with gcloud auth test
+    elif [ "$auth_method" = "API Key" ]; then
+        print_error "Google Cloud API key not found in GOOGLE_API_KEY or GOOGLE_CLOUD_API_KEY"
         return 1
     fi
 
-    if command -v curl >/dev/null 2>&1; then
-        local response
-        response=$(curl -s -w "%{http_code}" -o /dev/null \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $access_token" \
-            -H "X-Goog-User-Project: $project_id" \
-            -d '{
-                "input": {"text": "test"},
-                "voice": {"languageCode": "en-US", "name": "en-US-Neural2-A"},
-                "audioConfig": {"audioEncoding": "MP3"}
-            }' \
-            https://texttospeech.googleapis.com/v1/text:synthesize)
+    if [ "$auth_method" != "API Key" ]; then
+        # Test with gcloud auth
+        local access_token
+        access_token=$(gcloud auth print-access-token 2>/dev/null || echo "")
 
-        if [ "$response" = "200" ]; then
-            print_success "Google Cloud TTS API connection successful"
-            return 0
-        else
-            print_error "Google Cloud TTS API connection failed (HTTP $response)"
+        if [ -z "$access_token" ]; then
+            print_error "Could not get access token"
             return 1
         fi
-    else
-        print_warning "curl not available, skipping API connection test"
-        return 0
+
+        print_info "Using gcloud auth authentication"
+
+        if command -v curl >/dev/null 2>&1; then
+            local response
+            response=$(curl -s -w "%{http_code}" -o /dev/null \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $access_token" \
+                -H "X-Goog-User-Project: $project_id" \
+                -d '{
+                    "input": {"text": "test"},
+                    "voice": {"languageCode": "en-US", "name": "en-US-Neural2-A"},
+                    "audioConfig": {"audioEncoding": "MP3"}
+                }' \
+                https://texttospeech.googleapis.com/v1/text:synthesize)
+
+            if [ "$response" = "200" ]; then
+                print_success "Google Cloud TTS API connection successful (gcloud auth)"
+                return 0
+            else
+                print_error "Google Cloud TTS API connection failed (HTTP $response)"
+                return 1
+            fi
+        else
+            print_warning "curl not available, skipping API connection test"
+            return 0
+        fi
     fi
 }
 
@@ -285,10 +355,15 @@ run_tests() {
         print_info "To configure OpenAI:"
         print_info "  export OPENAI_API_KEY='your-key-here'"
         echo
-        print_info "To configure Google Cloud:"
+        print_info "To configure Google Cloud (gcloud auth):"
         print_info "  gcloud auth login"
         print_info "  gcloud config set project YOUR-PROJECT-ID"
         print_info "  gcloud services enable texttospeech.googleapis.com"
+        echo
+        print_info "To configure Google Cloud (API key):"
+        print_info "  export GOOGLE_CLOUD_PROJECT='your-project-id'"
+        print_info "  export GOOGLE_API_KEY='your-api-key'"
+        print_info "  export GOOGLE_AUTH_METHOD='API Key'"
     fi
 
     echo
@@ -309,6 +384,9 @@ show_help() {
     echo "  OPENAI_API_KEY        Your OpenAI API key"
     echo "  GOOGLE_CLOUD_PROJECT  Your Google Cloud project ID"
     echo "  GCP_PROJECT          Alternative Google Cloud project ID"
+    echo "  GOOGLE_API_KEY        Your Google Cloud API key (for API key auth)"
+    echo "  GOOGLE_CLOUD_API_KEY  Alternative Google Cloud API key"
+    echo "  GOOGLE_AUTH_METHOD    Authentication method ('gcloud auth' or 'API Key')"
     echo
 }
 
